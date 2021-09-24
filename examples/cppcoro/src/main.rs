@@ -1,4 +1,4 @@
-// cxx-async2/examples/cppcoro.rs
+// cxx-async2/examples/cppcoro/src/main.rs
 
 use crate::ffi::{RustOneshotF64, RustOneshotString};
 use async_recursion::async_recursion;
