@@ -2,7 +2,7 @@
 
 #include "cxx_async.h"
 #include <cstdint>
-#include "cxx-async2/src/main.rs.h"
+#include "cxx-async2/src/lib.rs.h"
 
 namespace cxx {
 namespace async {

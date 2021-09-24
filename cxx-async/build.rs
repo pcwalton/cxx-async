@@ -1,19 +1,9 @@
 // cxx-async2/build.rs
 
-use pkg_config::Config;
 use std::fs;
 
 fn main() {
-    /*
-    let _ = Config::new()
-        .atleast_version("0.58.0")
-        .probe("libfolly");
-        */
-    let cppcoro = Config::new().probe("cppcoro").unwrap();
-    println!("cargo:rustc-link-lib=cxxbridge1");
-
-    // TODO(pcwalton): Conditionally enable Folly example.
-    let sources = vec!["src/cppcoro_example.cpp", "src/cxx_async.cpp"];
+    let sources = vec!["src/cxx_async.cpp"];
     for source in &sources {
         println!("cargo:rerun-if-changed={}", source);
     }
@@ -25,9 +15,8 @@ fn main() {
         }
     }
 
-    cxx_build::bridge("src/main.rs")
+    cxx_build::bridge("src/lib.rs")
         .files(&sources)
         .include("include")
-        .includes(cppcoro.include_paths)
         .compile("cxx-async");
 }

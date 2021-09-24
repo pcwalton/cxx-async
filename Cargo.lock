@@ -36,6 +36,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "cppcoro"
+version = "0.1.0"
+dependencies = [
+ "async-recursion",
+ "cxx",
+ "cxx-async2",
+ "cxx-build",
+ "futures",
+ "once_cell",
+ "pkg-config",
+]
+
+[[package]]
 name = "cxx"
 version = "1.0.54"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -6,7 +6,7 @@
 #include <cppcoro/task.hpp>
 #include <cppcoro/when_all.hpp>
 #include <iostream>
-#include "cxx-async2/src/main.rs.h"
+#include "cppcoro/src/main.rs.h"
 #include "cxx_async.h"
 #include "cxx_async_cppcoro.h"
 #include "example.h"
