@@ -12,34 +12,14 @@
 #include "example.h"
 #include "rust/cxx.h"
 
-// HACK
-extern "C" {
-bool cxxbridge1$string$from_utf8(rust::String *self, const char *ptr,
-                                 std::size_t len) noexcept;
-}
-
-namespace rust {
-inline namespace cxxbridge1 {
-static void initString(String *self, const char *s, std::size_t len) {
-  if (!cxxbridge1$string$from_utf8(self, s, len))
-    throw std::invalid_argument("data for rust::String is not utf-8");
-  
-}
-
-String::String(const std::string &s) { initString(this, s.data(), s.length()); }
-
-String::operator std::string() const {
-    return std::string(this->data(), this->size());
-}
-
-}  // namespace cxxbridge1
-}  // namespace rust
-
 // Application code follows:
 
 const size_t EXAMPLE_SPLIT_LIMIT = 32;
 const size_t EXAMPLE_ARRAY_SIZE = 16384;
 
+// TODO(pcwalton): It'd be nice to be able to spawn the extra threads that `dot_product` creates on
+// a Rust thread pool instead. There has to be some kind of thread pool for this example to actually
+// demonstrate parallelism, though.
 cppcoro::static_thread_pool g_thread_pool;
 
 static cppcoro::task<double> dot_product_inner(const double a[], const double b[], size_t count) {
@@ -78,10 +58,16 @@ void cppcoro_call_rust_dot_product() {
     std::cout << result << std::endl;
 }
 
+void cppcoro_schedule_rust_dot_product() {
+    rust::Box<RustFutureF64> future = rust_dot_product();
+    double result = cppcoro::sync_wait(cppcoro::schedule_on(g_thread_pool, std::move(future)));
+    std::cout << result << std::endl;
+}
+
 rust::Box<RustFutureF64> cppcoro_not_product() {
     if (true)
         throw std::runtime_error("kaboom");
-    co_return 1.0;  // just to make this function a coroutine
+    co_return 1.0;  // Just to make this function a coroutine.
 }
 
 void cppcoro_call_rust_not_product() {

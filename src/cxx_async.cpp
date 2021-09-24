@@ -23,7 +23,7 @@ void suspended_coroutine_wake(uint8_t* ptr) {
 
 void suspended_coroutine_wake_by_ref(uint8_t* ptr) {
     SuspendedCoroutine* coroutine = reinterpret_cast<SuspendedCoroutine*>(ptr);
-    if (coroutine->poll() != FutureStatus::Pending)
+    if (wake_status_is_done(coroutine->wake()))
         coroutine->resume();
 }
 

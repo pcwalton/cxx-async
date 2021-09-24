@@ -1,4 +1,9 @@
-prefix=/mnt/c/Users/pcwalton/Source/cppcoro/build/linux_x64_clang12.0.1_debug
+# cxx-async2/etc/cppcoro.pc
+#
+# `cppcoro` doesn't come with an install script, so you may need to tell `cxx-async` where to find
+# it. You can use this `pkg-config` file as a template. Change the `prefix` variable as needed.
+
+prefix=/home/pcwalton/Source/cppcoro/build/linux_x64_clang12.0.1_debug
 exec_prefix=${prefix}
 libdir=${exec_prefix}/lib
 includedir=${exec_prefix}/../../include

@@ -8,9 +8,10 @@ use crate::ffi::{
 };
 use async_recursion::async_recursion;
 use futures::channel::oneshot::{self, Canceled, Receiver, Sender};
-use futures::executor;
+use futures::executor::{self, ThreadPool};
 use futures::future::BoxFuture;
 use futures::join;
+use futures::task::SpawnExt;
 use once_cell::sync::Lazy;
 use paste::paste;
 use pin_utils::unsafe_pinned;
@@ -19,6 +20,7 @@ use std::ffi::CStr;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::future::Future;
 use std::mem::{self, MaybeUninit};
+use std::ops::Range;
 use std::pin::Pin;
 use std::ptr;
 use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
@@ -80,6 +82,7 @@ mod ffi {
 
         fn cppcoro_dot_product() -> Box<RustFutureF64>;
         fn cppcoro_call_rust_dot_product();
+        fn cppcoro_schedule_rust_dot_product();
         fn cppcoro_not_product() -> Box<RustFutureF64>;
         fn cppcoro_call_rust_not_product();
         fn cppcoro_ping_pong(i: i32) -> Box<RustFutureString>;
@@ -270,12 +273,15 @@ unsafe fn rust_suspended_coroutine_drop(address: *const ()) {
 define_cxx_future!(F64, f64);
 define_cxx_future!(String, String);
 
+const VECTOR_LENGTH: usize = 16384;
 const SPLIT_LIMIT: usize = 32;
+
+static THREAD_POOL: Lazy<ThreadPool> = Lazy::new(|| ThreadPool::new().unwrap());
 
 static VECTORS: Lazy<(Vec<f64>, Vec<f64>)> = Lazy::new(|| {
     let mut rand = Xorshift::new();
     let (mut vector_a, mut vector_b) = (vec![], vec![]);
-    for _ in 0..16384 {
+    for _ in 0..VECTOR_LENGTH {
         vector_a.push(rand.next() as f64);
         vector_b.push(rand.next() as f64);
     }
@@ -302,26 +308,24 @@ impl Xorshift {
 }
 
 #[async_recursion]
-async fn dot_product(a: &[f64], b: &[f64]) -> f64 {
-    if a.len() > SPLIT_LIMIT {
-        let half_count = a.len() / 2;
+async fn dot_product(range: Range<usize>) -> f64 {
+    let len = range.end - range.start;
+    if len > SPLIT_LIMIT {
+        let mid = (range.start + range.end) / 2;
         let (first, second) = join!(
-            dot_product(&a[0..half_count], &b[0..half_count]),
-            dot_product(&a[half_count..], &b[half_count..])
+            THREAD_POOL.spawn_with_handle(dot_product(range.start..mid)).unwrap(),
+            dot_product(mid..range.end)
         );
         return first + second;
     }
 
-    let mut sum = 0.0;
-    for (&a, &b) in a.iter().zip(b.iter()) {
-        sum += a * b;
-    }
+    let (ref a, ref b) = *VECTORS;
+    let sum = range.clone().map(|index| a[index] * b[index]).sum();
     sum
 }
 
 fn rust_dot_product() -> Box<RustFutureF64> {
-    let (ref vector_a, ref vector_b) = *VECTORS;
-    RustFutureF64::from(dot_product(&vector_a, &vector_b))
+    RustFutureF64::from(dot_product(0..VECTOR_LENGTH))
 }
 
 fn rust_not_product() -> Box<RustFutureF64> {
@@ -346,11 +350,15 @@ fn rust_cppcoro_ping_pong(i: i32) -> Box<RustFutureString> {
 }
 
 fn test_cppcoro() {
+    // Test Rust calling C++ async functions, both synchronously and via a scheduler.
     let future = ffi::cppcoro_dot_product();
     println!("{}", executor::block_on(future).unwrap());
+    let future = ffi::cppcoro_dot_product();
+    println!("{}", executor::block_on(THREAD_POOL.spawn_with_handle(future).unwrap()).unwrap());
 
     // Test C++ calling Rust async functions.
     ffi::cppcoro_call_rust_dot_product();
+    ffi::cppcoro_schedule_rust_dot_product();
 
     // Test exceptions being thrown by C++ async functions.
     let future = ffi::cppcoro_not_product();

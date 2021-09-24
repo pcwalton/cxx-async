@@ -10,7 +10,6 @@ fn main() {
         .probe("libfolly");
         */
     let cppcoro = Config::new().probe("cppcoro").unwrap();
-    println!("cargo:rustc-link-lib=c++");
     println!("cargo:rustc-link-lib=cxxbridge1");
 
     // TODO(pcwalton): Conditionally enable Folly example.
@@ -27,11 +26,7 @@ fn main() {
     }
 
     cxx_build::bridge("src/main.rs")
-        .compiler("clang++")
         .files(&sources)
-        .flag("-std=gnu++2a")
-        .flag("-fcoroutines-ts")
-        .flag("-stdlib=libc++")
         .include("include")
         .includes(cppcoro.include_paths)
         .compile("cxx-async");

@@ -1,0 +1,6 @@
+[env]
+# In theory, your system GCC and libstdc++ should be able to compile everything here. In practice,
+# you probably want these overrides, so they're enabled by default.
+CXX = "clang++"
+CXXSTDLIB = "libc++"
+CXXFLAGS = "-std=gnu++2a -fcoroutines-ts -stdlib=libc++"
