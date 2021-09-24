@@ -108,6 +108,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "folly"
+version = "0.1.0"
+dependencies = [
+ "async-recursion",
+ "cxx",
+ "cxx-async2",
+ "cxx-build",
+ "futures",
+ "once_cell",
+ "pkg-config",
+]
+
+[[package]]
 name = "futures"
 version = "0.3.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"

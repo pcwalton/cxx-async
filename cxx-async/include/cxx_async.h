@@ -12,7 +12,6 @@
 #include <memory>
 #include <mutex>
 #include <optional>
-//#include "cxx-async2/src/lib.rs.h"
 #include "cxx_async_waker.h"
 #include "rust/cxx.h"
 
