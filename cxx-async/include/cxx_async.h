@@ -36,7 +36,7 @@ struct RustFutureResultTypeExtractor<TheOneshot (Future::*)(const TheResult*) co
     typedef TheResult Result;
 };
 template <typename Future>
-using RustOneshotResultFor =
+using RustResultFor =
     typename RustFutureResultTypeExtractor<decltype(&Future::channel)>::Result;
 
 class SuspendedCoroutine;
@@ -63,7 +63,7 @@ inline bool wake_status_is_done(FutureWakeStatus status) {
 // A temporary place to hold future results or errors that are sent to or returned from Rust.
 template <typename Future>
 union RustFutureResult {
-    RustOneshotResultFor<Future> m_result;
+    RustResultFor<Future> m_result;
     rust::String m_exception;
 
     // When using this type, you must fill `m_result` or `m_exception` manually via placement new.
@@ -74,7 +74,7 @@ union RustFutureResult {
 
 template <typename Future>
 class RustFutureReceiver {
-    typedef RustOneshotResultFor<Future> Result;
+    typedef RustResultFor<Future> Result;
 
     std::mutex m_lock;
     rust::Box<Future> m_future;
@@ -108,7 +108,7 @@ class RustFutureReceiver {
 
 template <typename Future>
 class RustAwaiter {
-    typedef RustOneshotResultFor<Future> Result;
+    typedef RustResultFor<Future> Result;
 
     friend class SuspendedCoroutine;
 
@@ -188,7 +188,7 @@ class SuspendedCoroutine {
 template <typename Future>
 class RustPromise {
     typedef RustOneshotFor<Future> Oneshot;
-    typedef RustOneshotResultFor<Future> Result;
+    typedef RustResultFor<Future> Result;
 
     Oneshot m_oneshot;
 

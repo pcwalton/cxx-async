@@ -6,22 +6,9 @@ use crate::ffi::{
     suspended_coroutine_clone, suspended_coroutine_drop, suspended_coroutine_wake,
     suspended_coroutine_wake_by_ref,
 };
-use async_recursion::async_recursion;
-use futures::channel::oneshot::{self, Canceled, Receiver, Sender};
-use futures::executor::{self, ThreadPool};
-use futures::future::BoxFuture;
-use futures::join;
-use futures::task::SpawnExt;
-use once_cell::sync::Lazy;
 use std::error::Error;
-use std::ffi::CStr;
 use std::fmt::{Display, Formatter, Result as FmtResult};
-use std::future::Future;
-use std::mem::{self, MaybeUninit};
-use std::ops::Range;
-use std::pin::Pin;
-use std::ptr;
-use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
+use std::task::{RawWaker, RawWakerVTable};
 
 pub const FUTURE_STATUS_PENDING: u32 = 0;
 pub const FUTURE_STATUS_COMPLETE: u32 = 1;
@@ -88,7 +75,8 @@ macro_rules! define_cxx_future {
             pub struct [<RustSender $name>](Option<::futures::channel::oneshot::Sender<
                 ::cxx_async2::CxxAsyncResult<$output>>>);
 
-            struct [<RustReceiver $name>](::futures::channel::oneshot::Receiver<::cxx_async2::CxxAsyncResult<$output>>);
+            struct [<RustReceiver $name>](::futures::channel::oneshot::Receiver<
+                ::cxx_async2::CxxAsyncResult<$output>>);
 
             impl [<RustFuture $name>] {
                 // SAFETY: See: https://docs.rs/pin-utils/0.1.0/pin_utils/macro.unsafe_pinned.html
@@ -96,9 +84,11 @@ macro_rules! define_cxx_future {
                 // move the field).
                 // (2) The struct doesn't implement Unpin.
                 // (3) The struct isn't `repr(packed)`.
-                ::cxx_async2::unsafe_pinned!(future: ::futures::future::BoxFuture<'static, ::cxx_async2::CxxAsyncResult<$output>>);
+                ::cxx_async2::unsafe_pinned!(future: ::futures::future::BoxFuture<'static,
+                    ::cxx_async2::CxxAsyncResult<$output>>);
 
-                fn from(future: impl ::std::future::Future<Output = $output> + Send + 'static) -> Box<Self> {
+                fn from(future: impl ::std::future::Future<Output = $output> + Send + 'static)
+                        -> Box<Self> {
                     return Self::from_fallible(wrapper(future));
 
                     async fn wrapper(
@@ -109,7 +99,8 @@ macro_rules! define_cxx_future {
                 }
 
                 fn from_fallible(
-                    future: impl ::std::future::Future<Output = ::cxx_async2::CxxAsyncResult<$output>> + Send + 'static,
+                    future: impl ::std::future::Future<Output =
+                        ::cxx_async2::CxxAsyncResult<$output>> + Send + 'static,
                 ) -> Box<Self> {
                     Box::new([<RustFuture $name>] {
                         future: Box::pin(future),
@@ -194,7 +185,8 @@ macro_rules! define_cxx_future {
 
             impl ::std::future::Future for [<RustReceiver $name>] {
                 type Output = ::cxx_async2::CxxAsyncResult<$output>;
-                fn poll(mut self: ::std::pin::Pin<&mut Self>, cx: &mut ::std::task::Context<'_>) -> ::std::task::Poll<Self::Output> {
+                fn poll(mut self: ::std::pin::Pin<&mut Self>, cx: &mut ::std::task::Context<'_>)
+                        -> ::std::task::Poll<Self::Output> {
                     match ::std::future::Future::poll(::std::pin::Pin::new(&mut self.0), cx) {
                         ::std::task::Poll::Pending => ::std::task::Poll::Pending,
                         ::std::task::Poll::Ready(Ok(value)) => ::std::task::Poll::Ready(value),

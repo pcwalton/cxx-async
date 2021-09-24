@@ -1,10 +1,11 @@
-// cxx-async2/src/cppcoro_example.cpp
+// cxx-async2/examples/cppcoro/src/cppcoro_example.cpp
 
 #include <cppcoro/schedule_on.hpp>
 #include <cppcoro/static_thread_pool.hpp>
 #include <cppcoro/sync_wait.hpp>
 #include <cppcoro/task.hpp>
 #include <cppcoro/when_all.hpp>
+#include <cstdlib>
 #include <iostream>
 #include "cppcoro/src/main.rs.h"
 #include "cxx_async.h"
@@ -12,14 +13,12 @@
 #include "example.h"
 #include "rust/cxx.h"
 
-// Application code follows:
-
 const size_t EXAMPLE_SPLIT_LIMIT = 32;
 const size_t EXAMPLE_ARRAY_SIZE = 16384;
 
 // TODO(pcwalton): It'd be nice to be able to spawn the extra threads that `dot_product` creates on
 // a Rust thread pool instead. There has to be some kind of thread pool for this example to actually
-// demonstrate parallelism, though.
+// test parallelism, though.
 cppcoro::static_thread_pool g_thread_pool;
 
 static cppcoro::task<double> dot_product_inner(const double a[], const double b[], size_t count) {
