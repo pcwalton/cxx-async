@@ -16,21 +16,6 @@
 namespace cxx {
 namespace async {
 
-/*
-class FollyTaskContinuation : public Continuation {
-    std::shared_ptr<folly::ManualExecutor> m_executor;
-
-   public:
-    virtual void resume() { m_executor->run(); }
-    virtual void destroy() { m_executor.reset(); }
-};
-
-template<typename Future>
-class FollyRustPromise {
-
-};
-*/
-
 class Execlet : public folly::Executor {
     rust::Box<RustExecletF64> m_rust_execlet;
 
@@ -65,40 +50,6 @@ inline void execlet_run_task(const uint8_t* execlet, uint8_t* task_ptr) {
     delete task;
 }
 
-#if 0
-template <typename Result>
-class AwaitableSemiFuture {
-    typedef folly::Executor::KeepAlive<folly::ManualExecutor> ExecutorRef;
-    typedef folly::coro::TaskWithExecutor<Result> TaskRef;
-    ExecutorRef m_executor;
-    TaskRef m_task;
-
-   public:
-    AwaitableSemiFuture(ExecutorRef&& executor, TaskRef&& task)
-        : m_executor(executor), m_task(task) {}
-
-    bool await_ready() noexcept {
-        return false;
-    }
-
-    bool await_suspend(std::experimental::coroutine_handle<void> next) {
-        
-    }
-
-    Result&& await_resume() {
-
-    }
-};
-
-template <typename Result>
-class SemiFutureAwaiter {
-    AwaitableSemiFuture<Result> m_semifuture;
-
-   public:
-    SemiFutureAwaiter(AwaitableSemiFuture<Result>&& semifuture) : m_semifuture(semifuture) {}
-};
-#endif
-
 template <typename Result>
 class AwaitTransformer<folly::coro::Task<Result>> {
     AwaitTransformer() = delete;
@@ -111,13 +62,5 @@ class AwaitTransformer<folly::coro::Task<Result>> {
 
 }  // namespace async
 }  // namespace cxx
-
-#if 0
-template <typename Result>
-inline cxx::async::SemiFutureAwaiter<Result> operator co_await(
-    cxx::async::AwaitableSemiFuture<Result>&& future) noexcept {
-    return cxx::async::SemiFutureAwaiter(std::move(future));
-}
-#endif
 
 #endif

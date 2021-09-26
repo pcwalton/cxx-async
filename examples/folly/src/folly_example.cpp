@@ -63,8 +63,6 @@ static folly::coro::Task<double> dot_product() {
 }
 
 rust::Box<RustFutureF64> folly_dot_product() {
-    // TODO(pcwalton): Make this `co_return co_await dot_product();` somehow.
-    //return cxx::async::folly_task_to_rust_future(dot_product());
     co_return co_await dot_product();
 }
 
