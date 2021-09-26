@@ -9,7 +9,10 @@ fn main() {
     // Folly's `.pc` file is missing the `fmt` and `boost_context` dependencies. Find them here.
     // FIXME(pcwalton): Is there a better method to find Boost? Look at what CMake does, maybe. Or
     // just fix Folly.
-    Config::new().statik(true).probe("fmt").expect("No `fmt` package found!");
+    Config::new()
+        .statik(true)
+        .probe("fmt")
+        .expect("No `fmt` package found!");
     println!("cargo:rustc-link-lib=boost_context");
 
     // Unfortunately, the `pkg-config` crate doesn't successfully parse some of Folly's
@@ -57,6 +60,7 @@ fn main() {
     }
 
     println!("cargo:rerun-if-changed=build.rs");
+    println!("cargo:rerun-if-changed=../include/cxx_async_folly.h");
     println!("cargo:rerun-if-changed=include/folly_example.h");
     println!("cargo:rerun-if-changed=src/folly_example.cpp");
 

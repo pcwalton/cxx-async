@@ -17,6 +17,8 @@
 #include "folly/src/main.rs.h"
 #include "rust/cxx.h"
 
+// Application code follows:
+
 const size_t EXAMPLE_SPLIT_LIMIT = 32;
 const size_t EXAMPLE_ARRAY_SIZE = 16384;
 
@@ -61,8 +63,9 @@ static folly::coro::Task<double> dot_product() {
 }
 
 rust::Box<RustFutureF64> folly_dot_product() {
-    // FIXME(pcwalton): Don't use `via()` here.
-    co_return co_await dot_product().semi().via(g_thread_pool);
+    // TODO(pcwalton): Make this `co_return co_await dot_product();` somehow.
+    //return cxx::async::folly_task_to_rust_future(dot_product());
+    co_return co_await dot_product();
 }
 
 void folly_call_rust_dot_product() {

@@ -35,8 +35,7 @@ struct RustFutureResultTypeExtractor<TheOneshot (Future::*)(const TheResult*) co
     typedef TheResult Result;
 };
 template <typename Future>
-using RustResultFor =
-    typename RustFutureResultTypeExtractor<decltype(&Future::channel)>::Result;
+using RustResultFor = typename RustFutureResultTypeExtractor<decltype(&Future::channel)>::Result;
 
 class SuspendedCoroutine;
 
@@ -58,6 +57,15 @@ enum class FutureWakeStatus {
 inline bool wake_status_is_done(FutureWakeStatus status) {
     return status == FutureWakeStatus::Complete || status == FutureWakeStatus::Error;
 }
+
+// Downstream libraries can customize this by adding template specializations.
+template <typename Awaiter>
+class AwaitTransformer {
+    AwaitTransformer() = delete;
+
+   public:
+    static Awaiter await_transform(Awaiter&& awaitable) noexcept { return std::move(awaitable); }
+};
 
 // A temporary place to hold future results or errors that are sent to or returned from Rust.
 template <typename Future>
@@ -131,6 +139,30 @@ class RustAwaiter {
     Result&& await_resume() { return m_receiver->get_result(); }
 };
 
+// This is like `std::experimental::coroutine_handle<void>`, but it doesn't *have* to be a
+// coroutine handle.
+class Continuation {
+    Continuation(const Continuation&) = delete;
+    void operator=(const Continuation&) = delete;
+
+   protected:
+    Continuation() {}
+
+   public:
+    virtual ~Continuation() {}
+    virtual void resume() = 0;
+    virtual void destroy() = 0;
+};
+
+class CoroutineHandleContinuation : public Continuation {
+    std::experimental::coroutine_handle<void> m_next;
+
+   public:
+    CoroutineHandleContinuation(std::experimental::coroutine_handle<void>&& next) : m_next(next) {}
+    virtual void resume() { m_next.resume(); }
+    virtual void destroy() { m_next.destroy(); }
+};
+
 // Wrapper object that encapsulates a suspended coroutine. This is the waker that is exposed to
 // Rust.
 //
@@ -143,12 +175,14 @@ class SuspendedCoroutine {
     typedef std::function<FutureWakeStatus(SuspendedCoroutine*)> WakeFn;
 
     std::atomic<uintptr_t> m_refcount;
-    std::optional<std::experimental::coroutine_handle<void>> m_next;
+    std::unique_ptr<Continuation> m_next;
     WakeFn m_wake_fn;
 
+    void forget_coroutine_handle() { m_next.reset(); }
+
    public:
-    SuspendedCoroutine(std::experimental::coroutine_handle<void>&& next, WakeFn&& wake_fn)
-        : m_refcount(1), m_next(next), m_wake_fn(std::move(wake_fn)) {}
+    SuspendedCoroutine(std::unique_ptr<Continuation>&& next, WakeFn&& wake_fn)
+        : m_refcount(1), m_next(std::move(next)), m_wake_fn(std::move(wake_fn)) {}
 
     ~SuspendedCoroutine() {
         if (m_next) {
@@ -156,8 +190,6 @@ class SuspendedCoroutine {
             m_next.reset();
         }
     }
-
-    void forget_coroutine_handle() { m_next.reset(); }
 
     SuspendedCoroutine* add_ref() {
         m_refcount.fetch_add(1);
@@ -172,13 +204,32 @@ class SuspendedCoroutine {
     }
 
     // Does not consume the `this` reference.
-    FutureWakeStatus wake() { return m_wake_fn(this); }
+    FutureWakeStatus wake() {
+        return m_wake_fn(this);
+    }
+
+    // Performs the initial poll needed when we go to sleep for the first time. Returns true if we
+    // should go to sleep and false otherwise.
+    //
+    // Consumes the `this` reference.
+    bool initial_suspend() {
+        FutureWakeStatus status = wake();
+
+        // Tricky: if the future is already complete, we won't go to sleep, which means we won't
+        // resume, so unless we intervene like this nothing will stop our destructor from
+        // destroying the coroutine handle.
+        bool done = wake_status_is_done(status);
+        if (done)
+            forget_coroutine_handle();
+        release();
+        return !done;
+    }
 
     void resume() {
-        CXXASYNC_ASSERT(m_next.has_value());
-        std::experimental::coroutine_handle<void>&& next = std::move(*m_next);
+        CXXASYNC_ASSERT(bool(m_next));
+        std::unique_ptr<Continuation> next = std::move(m_next);
         forget_coroutine_handle();
-        next.resume();
+        next->resume();
     }
 };
 
@@ -219,10 +270,10 @@ class RustPromise {
         }
     }
 
-    // Some libraries, like libunifex, need this.
-    template <typename Awaitable>
-    Awaitable await_transform(Awaitable&& awaitable) noexcept {
-        return std::move(awaitable);
+    // Customization point for library integration (e.g. folly).
+    template <typename Awaiter>
+    auto await_transform(Awaiter&& awaitable) noexcept {
+        return AwaitTransformer<Awaiter>::await_transform(std::move(awaitable));
     }
 };
 
@@ -246,24 +297,15 @@ template <typename Future>
 inline bool RustAwaiter<Future>::await_suspend(std::experimental::coroutine_handle<void> next) {
     std::weak_ptr<RustFutureReceiver<Future>> weak_receiver = m_receiver;
     SuspendedCoroutine* coroutine = new SuspendedCoroutine(
-        std::move(next), [weak_receiver = std::move(weak_receiver)](SuspendedCoroutine* coroutine) {
+        std::make_unique<CoroutineHandleContinuation>(std::move(next)),
+        [weak_receiver = std::move(weak_receiver)](SuspendedCoroutine* coroutine) {
             std::shared_ptr<RustFutureReceiver<Future>> receiver = weak_receiver.lock();
             // This rarely ever happens in practice, but I think it can.
             if (!receiver)
                 return FutureWakeStatus::Dead;
             return receiver->wake(coroutine->add_ref());
         });
-
-    FutureWakeStatus status = coroutine->wake();
-
-    // Tricky: if the future is already complete, we won't go to sleep, which means we won't
-    // resume, so unless we intervene like this nothing will stop the destructor of
-    // `SuspendedCoroutine` from destroying the coroutine handle.
-    bool done = wake_status_is_done(status);
-    if (done)
-        coroutine->forget_coroutine_handle();
-    coroutine->release();
-    return !done;
+    return coroutine->initial_suspend();
 }
 
 }  // namespace async
