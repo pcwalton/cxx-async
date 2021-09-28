@@ -17,25 +17,53 @@
 
 #define CXXASYNC_ASSERT(cond) ::cxx::async::cxxasync_assert(cond)
 
+// FIXME(pcwalton): Defining the `Box::drop()` specialization here is a botch.
+// FIXME(pcwalton): Sender being an incomplete type is awfully weird.
+#define CXXASYNC_DEFINE_FUTURE(name, type)                                                  \
+    extern const cxx::async::Vtable<RustFuture##name> cxx_async_vtable_##name;              \
+    class RustSender##name;                                                                 \
+    class RustExeclet##name;                                                                \
+    template <>                                                                             \
+    class cxx::async::RustFutureTraits<RustFuture##name> {                                  \
+       public:                                                                              \
+        typedef type Result;                                                                \
+        typedef RustSender##name Sender;                                                    \
+        typedef cxx::async::RustOneshot<RustFuture##name, Sender> Oneshot;                  \
+        typedef RustExeclet##name Execlet;                                                  \
+        typedef cxx::async::RustExecletBundle<RustFuture##name, Execlet> ExecletBundle;     \
+        static const cxx::async::Vtable<RustFuture##name>* vtable() {                       \
+            return &cxx_async_vtable_##name;                                                \
+        }                                                                                   \
+    };                                                                                      \
+    extern "C" void cxxasync_drop_box_rust_sender_##name(rust::Box<RustSender##name>* ptr); \
+    extern "C" void cxxasync_drop_box_rust_execlet_##name(                                  \
+        rust::Box<RustExeclet##name>* ptr);                                                 \
+    template <>                                                                             \
+    void rust::Box<RustSender##name>::drop() noexcept {                                     \
+        cxxasync_drop_box_rust_sender_##name(this);                                         \
+    }                                                                                       \
+    template <>                                                                             \
+    void rust::Box<RustExeclet##name>::drop() noexcept {                                    \
+        cxxasync_drop_box_rust_execlet_##name(this);                                        \
+    }
+
 namespace cxx {
 namespace async {
 
-// Given a future type, fetches the oneshot channel type that matches its output.
+// Must match the definition in `cxx_async/src/lib.rs`.
 template <typename Future>
-using RustOneshotFor = decltype(static_cast<Future*>(nullptr)->channel(nullptr));
+class RustFutureTraits {};
 
-// Given a future type, fetches the result type that matches its output.
-//
-// This extracts the type of the `value` parameter from the `channel` method using
-// the technique described here: https://stackoverflow.com/a/28033314
-template <typename Fn>
-struct RustFutureResultTypeExtractor;
-template <typename Future, typename TheResult, typename TheOneshot>
-struct RustFutureResultTypeExtractor<TheOneshot (Future::*)(const TheResult*) const noexcept> {
-    typedef TheResult Result;
-};
 template <typename Future>
-using RustResultFor = typename RustFutureResultTypeExtractor<decltype(&Future::channel)>::Result;
+using RustExecletFor = typename RustFutureTraits<Future>::Execlet;
+template <typename Future>
+using RustExecletBundleFor = typename RustFutureTraits<Future>::ExecletBundle;
+template <typename Future>
+using RustOneshotFor = typename RustFutureTraits<Future>::Oneshot;
+template <typename Future>
+using RustResultFor = typename RustFutureTraits<Future>::Result;
+template <typename Future>
+using RustSenderFor = typename RustFutureTraits<Future>::Sender;
 
 class SuspendedCoroutine;
 
@@ -65,6 +93,22 @@ class AwaitTransformer {
 
    public:
     static Awaiter await_transform(Awaiter&& awaitable) noexcept { return std::move(awaitable); }
+};
+
+template <typename Future>
+struct Vtable {
+    RustOneshotFor<Future> (*channel)();
+    void (*sender_send)(RustSenderFor<Future>& self, uint32_t status, const void* value);
+    uint32_t (*poll)(Future& self, void* result, const void* waker_data);
+    RustExecletBundleFor<Future> (*execlet)();
+    void (*submit)(const RustExecletFor<Future>& self, void (*run)(void*), void* task);
+    void (*execlet_send)(const RustExecletFor<Future> &self, const RustResultFor<Future>* value);
+};
+
+template <typename Future, typename Sender>
+struct RustOneshot {
+    rust::Box<Future> future;
+    rust::Box<Sender> sender;
 };
 
 // A temporary place to hold future results or errors that are sent to or returned from Rust.
@@ -204,9 +248,7 @@ class SuspendedCoroutine {
     }
 
     // Does not consume the `this` reference.
-    FutureWakeStatus wake() {
-        return m_wake_fn(this);
-    }
+    FutureWakeStatus wake() { return m_wake_fn(this); }
 
     // Performs the initial poll needed when we go to sleep for the first time. Returns true if we
     // should go to sleep and false otherwise.
@@ -243,7 +285,7 @@ class RustPromise {
     Oneshot m_oneshot;
 
    public:
-    RustPromise() : m_oneshot(static_cast<Future*>(nullptr)->channel(nullptr)) {}
+    RustPromise() : m_oneshot(RustFutureTraits<Future>::vtable()->channel()) {}
 
     rust::Box<Future> get_return_object() noexcept { return std::move(m_oneshot.future); }
 
@@ -254,19 +296,21 @@ class RustPromise {
     void return_value(Result&& value) {
         RustFutureResult<Future> result;
         new (&result.m_result) Result(std::move(value));
-        m_oneshot.sender->send(static_cast<uint32_t>(FuturePollStatus::Complete),
-                               reinterpret_cast<const uint8_t*>(&result));
+        RustFutureTraits<Future>::vtable()->sender_send(
+            *m_oneshot.sender, static_cast<uint32_t>(FuturePollStatus::Complete),
+            reinterpret_cast<const uint8_t*>(&result));
     }
 
     void unhandled_exception() noexcept {
+        const Vtable<Future>* vtable = RustFutureTraits<Future>::vtable();
         try {
             std::rethrow_exception(std::current_exception());
         } catch (const std::exception& exception) {
-            m_oneshot.sender->send(static_cast<uint32_t>(FuturePollStatus::Error),
-                                   reinterpret_cast<const uint8_t*>(exception.what()));
+            vtable->sender_send(*m_oneshot.sender, static_cast<uint32_t>(FuturePollStatus::Error),
+                                exception.what());
         } catch (...) {
-            m_oneshot.sender->send(static_cast<uint32_t>(FuturePollStatus::Error),
-                                   reinterpret_cast<const uint8_t*>("Unhandled C++ exception"));
+            vtable->sender_send(*m_oneshot.sender, static_cast<uint32_t>(FuturePollStatus::Error),
+                                "Unhandled C++ exception");
         }
     }
 
@@ -288,8 +332,8 @@ FutureWakeStatus RustFutureReceiver<Future>::wake(SuspendedCoroutine* coroutine)
         return FutureWakeStatus::Dead;
     }
 
-    m_status = static_cast<FuturePollStatus>(m_future->poll(reinterpret_cast<uint8_t*>(&m_result),
-                                                            reinterpret_cast<uint8_t*>(coroutine)));
+    m_status = static_cast<FuturePollStatus>(
+        RustFutureTraits<Future>::vtable()->poll(*m_future, &m_result, coroutine));
     return static_cast<FutureWakeStatus>(m_status);
 }
 

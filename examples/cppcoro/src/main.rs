@@ -1,8 +1,7 @@
 // cxx-async2/examples/cppcoro/src/main.rs
 
-use crate::ffi::{RustOneshotF64, RustOneshotString};
 use async_recursion::async_recursion;
-use cxx_async2::{define_cxx_future, CxxAsyncException};
+use cxx_async2::{define_cxx_future, CxxAsyncException, FutureWrap};
 use futures::executor::{self, ThreadPool};
 use futures::join;
 use futures::task::SpawnExt;
@@ -11,33 +10,9 @@ use std::ops::Range;
 
 #[cxx::bridge]
 mod ffi {
-    // Boilerplate for F64
-    pub struct RustOneshotF64 {
-        pub future: Box<RustFutureF64>,
-        pub sender: Box<RustSenderF64>,
-    }
     extern "Rust" {
         type RustFutureF64;
-        type RustSenderF64;
-        unsafe fn channel(self: &RustFutureF64, value: *const f64) -> RustOneshotF64;
-        unsafe fn send(self: &mut RustSenderF64, status: u32, value: *const u8);
-        unsafe fn poll(self: &mut RustFutureF64, result: *mut u8, waker_data: *const u8) -> u32;
-    }
-
-    // Boilerplate for String
-    pub struct RustOneshotString {
-        pub future: Box<RustFutureString>,
-        pub sender: Box<RustSenderString>,
-    }
-    extern "Rust" {
         type RustFutureString;
-        type RustSenderString;
-        unsafe fn channel(self: &RustFutureString, value: *const String) -> RustOneshotString;
-        unsafe fn send(self: &mut RustSenderString, status: u32, value: *const u8);
-        unsafe fn poll(self: &mut RustFutureString, result: *mut u8, waker_data: *const u8) -> u32;
-    }
-
-    extern "Rust" {
         fn rust_dot_product() -> Box<RustFutureF64>;
         fn rust_not_product() -> Box<RustFutureF64>;
         fn rust_cppcoro_ping_pong(i: i32) -> Box<RustFutureString>;
@@ -112,18 +87,17 @@ async fn dot_product(range: Range<usize>) -> f64 {
 }
 
 fn rust_dot_product() -> Box<RustFutureF64> {
-    RustFutureF64::from(dot_product(0..VECTOR_LENGTH))
+    RustFutureF64::from_infallible(dot_product(0..VECTOR_LENGTH))
 }
 
 fn rust_not_product() -> Box<RustFutureF64> {
-    async fn go() -> Result<f64, CxxAsyncException> {
+    RustFutureF64::from_fallible(async {
         Err(CxxAsyncException::new("kapow".to_owned().into_boxed_str()))
-    }
-    RustFutureF64::from_fallible(go())
+    })
 }
 
 fn rust_cppcoro_ping_pong(i: i32) -> Box<RustFutureString> {
-    async fn go(i: i32) -> String {
+    RustFutureString::from_infallible(async move {
         format!(
             "{}ping ",
             if i < 4 {
@@ -132,8 +106,7 @@ fn rust_cppcoro_ping_pong(i: i32) -> Box<RustFutureString> {
                 "".to_owned()
             }
         )
-    }
-    RustFutureString::from(go(i))
+    })
 }
 
 fn main() {

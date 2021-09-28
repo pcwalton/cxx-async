@@ -17,7 +17,8 @@
 #include "folly/src/main.rs.h"
 #include "rust/cxx.h"
 
-// Application code follows:
+CXXASYNC_DEFINE_FUTURE(F64, double);
+CXXASYNC_DEFINE_FUTURE(String, rust::String);
 
 const size_t EXAMPLE_SPLIT_LIMIT = 32;
 const size_t EXAMPLE_ARRAY_SIZE = 16384;
@@ -63,7 +64,7 @@ static folly::coro::Task<double> dot_product() {
 }
 
 rust::Box<RustFutureF64> folly_dot_product() {
-    co_return co_await dot_product();
+    co_return co_await cxx::async::folly_task_to_rust_future<RustFutureF64>(dot_product());
 }
 
 void folly_call_rust_dot_product() {
