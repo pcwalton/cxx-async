@@ -15,7 +15,7 @@ mod ffi {
         type RustFutureString;
         fn rust_dot_product() -> Box<RustFutureF64>;
         fn rust_not_product() -> Box<RustFutureF64>;
-        //fn rust_folly_ping_pong(i: i32) -> Box<RustFutureString>;
+        fn rust_folly_ping_pong(i: i32) -> Box<RustFutureString>;
     }
 
     unsafe extern "C++" {
@@ -25,7 +25,7 @@ mod ffi {
         fn folly_schedule_rust_dot_product();
         fn folly_not_product() -> Box<RustFutureF64>;
         fn folly_call_rust_not_product();
-        //fn folly_ping_pong(i: i32) -> Box<RustFutureString>;
+        fn folly_ping_pong(i: i32) -> Box<RustFutureString>;
     }
 }
 
@@ -97,9 +97,8 @@ fn rust_not_product() -> Box<RustFutureF64> {
     })
 }
 
-/*
 fn rust_folly_ping_pong(i: i32) -> Box<RustFutureString> {
-    async fn go(i: i32) -> String {
+    RustFutureString::infallible(async move {
         format!(
             "{}ping ",
             if i < 4 {
@@ -108,10 +107,8 @@ fn rust_folly_ping_pong(i: i32) -> Box<RustFutureString> {
                 "".to_owned()
             }
         )
-    }
-    RustFutureString::from(go(i))
+    })
 }
-*/
 
 fn main() {
     // Test Rust calling C++ async functions, both synchronously and via a scheduler.
@@ -137,9 +134,7 @@ fn main() {
     // Test errors being thrown by Rust async functions.
     ffi::folly_call_rust_not_product();
 
-    /*
     // Test yielding across the boundary repeatedly.
     let future = ffi::folly_ping_pong(0);
     println!("{}", executor::block_on(future).unwrap());
-    */
 }

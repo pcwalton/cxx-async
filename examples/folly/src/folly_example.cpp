@@ -69,6 +69,11 @@ static folly::coro::Task<double> not_product() {
     co_return 1.0;  // Just to make this function a coroutine.
 }
 
+static folly::coro::Task<rust::String> ping_pong(int i) {
+    std::string string(co_await rust_folly_ping_pong(i));
+    co_return std::move(string) + "pong ";
+}
+
 rust::Box<RustFutureF64> folly_dot_product() {
     co_return co_await dot_product();
 }
@@ -99,9 +104,6 @@ void folly_call_rust_not_product() {
     }
 }
 
-/*
 rust::Box<RustFutureString> folly_ping_pong(int i) {
-    std::string string(co_await rust_folly_ping_pong(i));
-    co_return std::move(string) + "pong ";
+    co_return co_await ping_pong(i);
 }
-*/
