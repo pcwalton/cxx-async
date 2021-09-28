@@ -1,7 +1,7 @@
 // cxx-async2/examples/cppcoro/src/main.rs
 
 use async_recursion::async_recursion;
-use cxx_async2::{define_cxx_future, CxxAsyncException, FutureWrap};
+use cxx_async2::{define_cxx_future, CxxAsyncException};
 use futures::executor::{self, ThreadPool};
 use futures::join;
 use futures::task::SpawnExt;
@@ -87,17 +87,17 @@ async fn dot_product(range: Range<usize>) -> f64 {
 }
 
 fn rust_dot_product() -> Box<RustFutureF64> {
-    RustFutureF64::from_infallible(dot_product(0..VECTOR_LENGTH))
+    RustFutureF64::infallible(dot_product(0..VECTOR_LENGTH))
 }
 
 fn rust_not_product() -> Box<RustFutureF64> {
-    RustFutureF64::from_fallible(async {
+    RustFutureF64::fallible(async {
         Err(CxxAsyncException::new("kapow".to_owned().into_boxed_str()))
     })
 }
 
 fn rust_cppcoro_ping_pong(i: i32) -> Box<RustFutureString> {
-    RustFutureString::from_infallible(async move {
+    RustFutureString::infallible(async move {
         format!(
             "{}ping ",
             if i < 4 {

@@ -231,17 +231,17 @@ where
     }
 }
 
-pub trait FutureWrap {
+pub trait IntoRustFuture {
     type Output;
 
-    fn from_infallible<Fut>(future: Fut) -> Box<Self>
+    fn infallible<Fut>(future: Fut) -> Box<Self>
     where
         Fut: Future<Output = Self::Output> + Send + 'static,
     {
-        return Self::from_fallible(async move { Ok(future.await) });
+        return Self::fallible(async move { Ok(future.await) });
     }
 
-    fn from_fallible<Fut>(future: Fut) -> Box<Self>
+    fn fallible<Fut>(future: Fut) -> Box<Self>
     where
         Fut: Future<Output = CxxAsyncResult<Self::Output>> + Send + 'static;
 }
@@ -283,9 +283,9 @@ macro_rules! define_cxx_future {
                     ::cxx_async2::CxxAsyncResult<$output>>);
             }
 
-            impl ::cxx_async2::FutureWrap for [<RustFuture $name>] {
+            impl ::cxx_async2::IntoRustFuture for [<RustFuture $name>] {
                 type Output = $output;
-                fn from_fallible<Fut>(future: Fut) -> Box<Self> where Fut:
+                fn fallible<Fut>(future: Fut) -> Box<Self> where Fut:
                         ::std::future::Future<Output = ::cxx_async2::CxxAsyncResult<$output>> +
                             Send + 'static {
                     Box::new([<RustFuture $name>] {
@@ -333,18 +333,23 @@ macro_rules! define_cxx_future {
                 }
             }
 
-            /*
-            impl ::std::convert::From<::cxx_async2::Execlet<$output>> for
-                    [<RustExecletFuture $name>] {
-                fn from(execlet: ::cxx_async2::Execlet<$output>) -> Self {
-                    Self(::cxx_async2::ExecletFuture::new(execlet))
-                }
-            }
-            */
-
             impl ::std::convert::From<::cxx_async2::Execlet<$output>> for [<RustExeclet $name>] {
                 fn from(execlet: ::cxx_async2::Execlet<$output>) -> Self {
                     Self(execlet)
+                }
+            }
+
+            // Convenience wrappers so that client code doesn't have to import `IntoRustFuture`.
+            impl [<RustFuture $name>] {
+                pub fn infallible<Fut>(future: Fut) -> Box<Self>
+                        where Fut: ::std::future::Future<Output = $output> + Send + 'static {
+                    <[<RustFuture $name>] as ::cxx_async2::IntoRustFuture>::infallible(future)
+                }
+
+                pub fn fallible<Fut>(future: Fut) -> Box<Self>
+                        where Fut: ::std::future::Future<Output =
+                            ::cxx_async2::CxxAsyncResult<$output>> + Send + 'static {
+                    <[<RustFuture $name>] as ::cxx_async2::IntoRustFuture>::fallible(future)
                 }
             }
 
@@ -471,13 +476,13 @@ where
 pub unsafe extern "C" fn cxx_async_execlet_bundle<Future, Exec, Output>(
     out_bundle: *mut CxxAsyncExecletBundle<Future, Exec>,
 ) where
-    Future: FutureWrap<Output = Output>,
+    Future: IntoRustFuture<Output = Output>,
     Exec: From<Execlet<Output>>,
     Output: Clone + Send + 'static,
 {
     let (future, execlet) = Execlet::<Output>::bundle();
     let bundle = CxxAsyncExecletBundle {
-        future: Future::from_infallible(future),
+        future: Future::infallible(future),
         execlet: Box::new(execlet.into()),
     };
     ptr::copy_nonoverlapping(&bundle, out_bundle, 1);

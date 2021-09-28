@@ -1,7 +1,7 @@
 // cxx-async2/examples/folly/src/main.rs
 
 use async_recursion::async_recursion;
-use cxx_async2::{define_cxx_future, CxxAsyncException, FutureWrap};
+use cxx_async2::{define_cxx_future, CxxAsyncException};
 use futures::executor::{self, ThreadPool};
 use futures::join;
 use futures::task::SpawnExt;
@@ -28,27 +28,6 @@ mod ffi {
         //fn folly_ping_pong(i: i32) -> Box<RustFutureString>;
     }
 }
-
-/*
-#[derive(Clone)]
-pub struct RustExecletF64(Arc<Mutex<RustExecletDataF64>>);
-
-struct RustExecletTaskF64(*mut u8);
-
-struct RustExecletDataF64 {
-    runqueue: VecDeque<RustExecletTaskF64>,
-    result: Option<f64>,
-    waker: Option<Waker>,
-    running: bool,
-}
-
-unsafe impl Send for RustExecletDataF64 {}
-unsafe impl Sync for RustExecletDataF64 {}
-
-struct RustExecletFutureF64 {
-    execlet: RustExecletF64,
-}
-*/
 
 // Application code follows
 
@@ -109,14 +88,13 @@ async fn dot_product(range: Range<usize>) -> f64 {
 }
 
 fn rust_dot_product() -> Box<RustFutureF64> {
-    RustFutureF64::from_infallible(dot_product(0..VECTOR_LENGTH))
+    RustFutureF64::infallible(dot_product(0..VECTOR_LENGTH))
 }
 
 fn rust_not_product() -> Box<RustFutureF64> {
-    async fn go() -> Result<f64, CxxAsyncException> {
+    RustFutureF64::fallible(async {
         Err(CxxAsyncException::new("kapow".to_owned().into_boxed_str()))
-    }
-    RustFutureF64::from_fallible(go())
+    })
 }
 
 /*

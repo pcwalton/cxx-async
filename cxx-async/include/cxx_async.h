@@ -18,7 +18,7 @@
 #define CXXASYNC_ASSERT(cond) ::cxx::async::cxxasync_assert(cond)
 
 // FIXME(pcwalton): Defining the `Box::drop()` specialization here is a botch.
-// FIXME(pcwalton): Sender being an incomplete type is awfully weird.
+// FIXME(pcwalton): Sender and Execlet being incomplete types is awfully weird.
 #define CXXASYNC_DEFINE_FUTURE(name, type)                                                  \
     extern const cxx::async::Vtable<RustFuture##name> cxx_async_vtable_##name;              \
     class RustSender##name;                                                                 \
