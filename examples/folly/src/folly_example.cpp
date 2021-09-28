@@ -63,8 +63,14 @@ static folly::coro::Task<double> dot_product() {
     co_return co_await dot_product_inner(&array_a[0], &array_b[0], array_a.size());
 }
 
+static folly::coro::Task<double> not_product() {
+    if (true)
+        throw std::runtime_error("kaboom");
+    co_return 1.0;  // Just to make this function a coroutine.
+}
+
 rust::Box<RustFutureF64> folly_dot_product() {
-    co_return co_await cxx::async::folly_task_to_rust_future<RustFutureF64>(dot_product());
+    co_return co_await dot_product();
 }
 
 void folly_call_rust_dot_product() {
@@ -80,9 +86,7 @@ void folly_schedule_rust_dot_product() {
 }
 
 rust::Box<RustFutureF64> folly_not_product() {
-    if (true)
-        throw std::runtime_error("kaboom");
-    co_return 1.0;  // Just to make this function a coroutine.
+    co_return co_await not_product();
 }
 
 void folly_call_rust_not_product() {

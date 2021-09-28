@@ -87,7 +87,7 @@ inline bool wake_status_is_done(FutureWakeStatus status) {
 }
 
 // Downstream libraries can customize this by adding template specializations.
-template <typename Awaiter>
+template <typename Awaiter, typename Future>
 class AwaitTransformer {
     AwaitTransformer() = delete;
 
@@ -99,10 +99,10 @@ template <typename Future>
 struct Vtable {
     RustOneshotFor<Future> (*channel)();
     void (*sender_send)(RustSenderFor<Future>& self, uint32_t status, const void* value);
-    uint32_t (*poll)(Future& self, void* result, const void* waker_data);
+    uint32_t (*future_poll)(Future& self, void* result, const void* waker_data);
     RustExecletBundleFor<Future> (*execlet)();
-    void (*submit)(const RustExecletFor<Future>& self, void (*run)(void*), void* task);
-    void (*execlet_send)(const RustExecletFor<Future> &self, const RustResultFor<Future>* value);
+    void (*execlet_submit)(const RustExecletFor<Future>& self, void (*run)(void*), void* task);
+    void (*execlet_send)(const RustExecletFor<Future> &self, uint32_t status, const void* value);
 };
 
 template <typename Future, typename Sender>
@@ -317,7 +317,7 @@ class RustPromise {
     // Customization point for library integration (e.g. folly).
     template <typename Awaiter>
     auto await_transform(Awaiter&& awaitable) noexcept {
-        return AwaitTransformer<Awaiter>::await_transform(std::move(awaitable));
+        return AwaitTransformer<Awaiter, Future>::await_transform(std::move(awaitable));
     }
 };
 
@@ -333,7 +333,7 @@ FutureWakeStatus RustFutureReceiver<Future>::wake(SuspendedCoroutine* coroutine)
     }
 
     m_status = static_cast<FuturePollStatus>(
-        RustFutureTraits<Future>::vtable()->poll(*m_future, &m_result, coroutine));
+        RustFutureTraits<Future>::vtable()->future_poll(*m_future, &m_result, coroutine));
     return static_cast<FutureWakeStatus>(m_status);
 }
 

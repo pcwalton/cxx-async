@@ -79,9 +79,9 @@ pub type CxxAsyncResult<T> = Result<T, CxxAsyncException>;
 pub struct CxxAsyncVtable {
     pub channel: *mut u8,
     pub sender_send: *mut u8,
-    pub poll: *mut u8,
+    pub future_poll: *mut u8,
     pub execlet: *mut u8,
-    pub submit: *mut u8,
+    pub execlet_submit: *mut u8,
     pub execlet_send: *mut u8,
 }
 
@@ -159,7 +159,7 @@ where
     Output: Clone,
 {
     runqueue: VecDeque<ExecletTask>,
-    result: Option<Output>,
+    result: Option<CxxAsyncResult<Output>>,
     waker: Option<Waker>,
     running: bool,
 }
@@ -207,8 +207,8 @@ impl<Output> Future for ExecletFuture<Output>
 where
     Output: Clone,
 {
-    // FIXME(pcwalton): Should be CxxAsyncResult
-    type Output = Output;
+    type Output = CxxAsyncResult<Output>;
+
     fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         let mut guard = self.execlet.0.lock().unwrap();
         debug_assert!(!guard.running);
@@ -382,11 +382,11 @@ macro_rules! define_cxx_future {
                         [<RustSender $name>], [<RustReceiver $name>], $output> as *mut u8,
                     sender_send: ::cxx_async2::cxx_async_sender_send::<[<RustSender $name>],
                         $output> as *mut u8,
-                    poll: ::cxx_async2::cxx_async_future_poll::<$output, [<RustFuture $name>]> as
-                        *mut u8,
+                    future_poll: ::cxx_async2::cxx_async_future_poll::<$output,
+                        [<RustFuture $name>]> as *mut u8,
                     execlet: ::cxx_async2::cxx_async_execlet_bundle::<[<RustFuture $name>],
                         [<RustExeclet $name>], $output> as *mut u8,
-                    submit: ::cxx_async2::cxx_async_execlet_submit::<$output> as *mut u8,
+                    execlet_submit: ::cxx_async2::cxx_async_execlet_submit::<$output> as *mut u8,
                     execlet_send: ::cxx_async2::cxx_async_execlet_send::<$output> as *mut u8,
                 };
         }
@@ -412,17 +412,8 @@ pub unsafe extern "C" fn cxx_async_channel<Future, Sender, Receiver, Output>(
     mem::forget(oneshot);
 }
 
-// SAFETY: This is a raw FFI function called by our C++ code.
-//
-// Takes ownership of the value. The caller must not call its destructor.
-pub unsafe extern "C" fn cxx_async_sender_send<Sender, Output>(
-    this: &mut Sender,
-    status: u32,
-    value: *const u8,
-) where
-    Sender: RustSender<Output = Output>,
-{
-    let to_send = match status {
+unsafe fn unpack_value_to_send<Output>(status: u32, value: *const u8) -> CxxAsyncResult<Output> {
+    match status {
         FUTURE_STATUS_COMPLETE => {
             let mut staging: MaybeUninit<Output> = MaybeUninit::uninit();
             ptr::copy_nonoverlapping(value as *const Output, staging.as_mut_ptr(), 1);
@@ -435,9 +426,20 @@ pub unsafe extern "C" fn cxx_async_sender_send<Sender, Output>(
             ))
         }
         _ => unreachable!(),
-    };
+    }
+}
 
-    this.send(to_send)
+// SAFETY: This is a raw FFI function called by our C++ code.
+//
+// Takes ownership of the value. The caller must not call its destructor.
+pub unsafe extern "C" fn cxx_async_sender_send<Sender, Output>(
+    this: &mut Sender,
+    status: u32,
+    value: *const u8,
+) where
+    Sender: RustSender<Output = Output>,
+{
+    this.send(unpack_value_to_send(status, value))
 }
 
 // SAFETY: This is a raw FFI function called by our C++ code.
@@ -482,7 +484,7 @@ pub unsafe extern "C" fn cxx_async_execlet_bundle<Future, Exec, Output>(
 {
     let (future, execlet) = Execlet::<Output>::bundle();
     let bundle = CxxAsyncExecletBundle {
-        future: Future::infallible(future),
+        future: Future::fallible(future),
         execlet: Box::new(execlet.into()),
     };
     ptr::copy_nonoverlapping(&bundle, out_bundle, 1);
@@ -510,15 +512,14 @@ pub unsafe extern "C" fn cxx_async_execlet_submit<Output>(
 
 pub unsafe extern "C" fn cxx_async_execlet_send<Output>(
     this: &Execlet<Output>,
-    value: *const Output,
+    status: u32,
+    value: *const u8,
 ) where
     Output: Clone,
 {
     let mut this = this.0.lock().unwrap();
     assert!(this.result.is_none());
-    let mut staging = MaybeUninit::uninit();
-    ptr::copy_nonoverlapping(value, staging.as_mut_ptr(), 1);
-    this.result = Some(staging.assume_init());
+    this.result = Some(unpack_value_to_send(status, value));
 
     // Don't do this if we're running, or we might end up in a situation where the waker tries
     // to poll us again, which is UB (and will deadlock in the C++ bindings).
