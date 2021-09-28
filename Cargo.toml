@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "cxx-async",
+    "macro",
     "examples/cppcoro",
     "examples/folly",
 ]

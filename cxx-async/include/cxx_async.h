@@ -20,7 +20,7 @@
 // FIXME(pcwalton): Defining the `Box::drop()` specialization here is a botch.
 // FIXME(pcwalton): Sender and Execlet being incomplete types is awfully weird.
 #define CXXASYNC_DEFINE_FUTURE(name, type)                                                  \
-    extern const cxx::async::Vtable<RustFuture##name> cxx_async_vtable_##name;              \
+    extern const cxx::async::Vtable<RustFuture##name> cxxasync_vtable_RustFuture##name;    \
     class RustSender##name;                                                                 \
     class RustExeclet##name;                                                                \
     template <>                                                                             \
@@ -32,19 +32,19 @@
         typedef RustExeclet##name Execlet;                                                  \
         typedef cxx::async::RustExecletBundle<RustFuture##name, Execlet> ExecletBundle;     \
         static const cxx::async::Vtable<RustFuture##name>* vtable() {                       \
-            return &cxx_async_vtable_##name;                                                \
+            return &cxxasync_vtable_RustFuture##name;                                                \
         }                                                                                   \
     };                                                                                      \
-    extern "C" void cxxasync_drop_box_rust_sender_##name(rust::Box<RustSender##name>* ptr); \
-    extern "C" void cxxasync_drop_box_rust_execlet_##name(                                  \
+    extern "C" void cxxasync_drop_box_rust_sender_RustFuture##name(rust::Box<RustSender##name>* ptr); \
+    extern "C" void cxxasync_drop_box_rust_execlet_RustFuture##name(                                  \
         rust::Box<RustExeclet##name>* ptr);                                                 \
     template <>                                                                             \
     void rust::Box<RustSender##name>::drop() noexcept {                                     \
-        cxxasync_drop_box_rust_sender_##name(this);                                         \
+        cxxasync_drop_box_rust_sender_RustFuture##name(this);                               \
     }                                                                                       \
     template <>                                                                             \
     void rust::Box<RustExeclet##name>::drop() noexcept {                                    \
-        cxxasync_drop_box_rust_execlet_##name(this);                                        \
+        cxxasync_drop_box_rust_execlet_RustFuture##name(this);                              \
     }
 
 namespace cxx {

@@ -47,8 +47,8 @@ const FUTURE_STATUS_PENDING: u32 = 0;
 const FUTURE_STATUS_COMPLETE: u32 = 1;
 const FUTURE_STATUS_ERROR: u32 = 2;
 
-#[doc(hidden)]
-pub use paste::paste;
+pub use cxx_async_macro::bridge_future;
+
 #[doc(hidden)]
 pub use pin_utils::unsafe_pinned;
 
@@ -266,6 +266,7 @@ impl<Output> Execlet<Output>
 where
     Output: Clone,
 {
+    // Creates a new execlet.
     fn new() -> Execlet<Output> {
         Execlet(Arc::new(Mutex::new(ExecletData {
             runqueue: VecDeque::new(),
@@ -275,6 +276,7 @@ where
         })))
     }
 
+    // Creates a new future/execlet pair.
     fn bundle() -> (ExecletFuture<Output>, Self) {
         let execlet = Self::new();
         let future = ExecletFuture {
@@ -354,187 +356,6 @@ pub trait IntoCxxAsyncFuture {
     fn fallible<Fut>(future: Fut) -> Box<Self>
     where
         Fut: Future<Output = CxxAsyncResult<Self::Output>> + Send + 'static;
-}
-
-/// Defines a shared future type that can be awaited by asynchronous code in the other language.
-///
-/// The first argument is the name of the future, minus the `RustFuture` prefix. The second argument
-/// is the name of the Rust output type, which will be automatically converted to the corresponding
-/// C++ type. For example, to define a shared future named `RustFutureF64` that returns an `f64`,
-/// you could write `define_cxx_future!(F64, f64);`.
-#[macro_export]
-macro_rules! define_cxx_future {
-    ($name:ident, $output:ty) => {
-        ::cxx_async2::paste! {
-            /// A future shared between Rust and C++.
-            pub struct [<RustFuture $name>] {
-                // FIXME(pcwalton): Unfortunately, as far as I can tell this has to be double-boxed
-                // because we need the `RustFuture` type to be Sized.
-                future: ::futures::future::BoxFuture<'static,
-                    ::cxx_async2::CxxAsyncResult<$output>>,
-            }
-
-            // The wrapper for the sending end.
-            #[repr(transparent)]
-            #[doc(hidden)]
-            pub struct [<RustSender $name>](Option<::futures::channel::oneshot::Sender<
-                ::cxx_async2::CxxAsyncResult<$output>>>);
-
-            // A type alias for the receiving end (i.e. the concrete future type).
-            type [<RustReceiver $name>] = ::cxx_async2::CxxAsyncReceiver<$output>;
-
-            /*
-            #[repr(C)]
-            #[doc(hidden)]
-            pub struct [<RustOneshot $name>] {
-                future: Box<[<RustFuture $name>]>,
-                sender: Box<[<RustSender $name>]>,
-            }
-
-            #[repr(transparent)]
-            pub struct [<RustExecletFuture $name>](::cxx_async2::ExecletFuture<$output>);
-            */
-
-            // The wrapped execlet for this future.
-            #[repr(transparent)]
-            pub struct [<RustExeclet $name>](::cxx_async2::Execlet<$output>);
-
-            impl [<RustFuture $name>] {
-                // SAFETY: See: https://docs.rs/pin-utils/0.1.0/pin_utils/macro.unsafe_pinned.html
-                // 1. The struct does not implement Drop (other than for debugging, which doesn't
-                // move the field).
-                // 2. The struct doesn't implement Unpin.
-                // 3. The struct isn't `repr(packed)`.
-                ::cxx_async2::unsafe_pinned!(future: ::futures::future::BoxFuture<'static,
-                    ::cxx_async2::CxxAsyncResult<$output>>);
-            }
-
-            // Define how to box up a future.
-            impl ::cxx_async2::IntoCxxAsyncFuture for [<RustFuture $name>] {
-                type Output = $output;
-                fn fallible<Fut>(future: Fut) -> Box<Self> where Fut:
-                        ::std::future::Future<Output = ::cxx_async2::CxxAsyncResult<$output>> +
-                            Send + 'static {
-                    Box::new([<RustFuture $name>] {
-                        future: Box::pin(future),
-                    })
-                }
-            }
-
-            // Implement the Rust Future trait.
-            impl ::std::future::Future for [<RustFuture $name>] {
-                type Output = ::cxx_async2::CxxAsyncResult<$output>;
-                fn poll(self: ::std::pin::Pin<&mut Self>, cx: &mut ::std::task::Context<'_>)
-                        -> ::std::task::Poll<Self::Output> {
-                    self.future().poll(cx)
-                }
-            }
-
-            // Implement the CxxAsyncFuture trait that doesn't require pinning.
-            impl ::cxx_async2::CxxAsyncFuture for [<RustFuture $name>] {
-                type Output = $output;
-                fn poll(&mut self, context: &mut ::std::task::Context)
-                        -> ::std::task::Poll<::cxx_async2::CxxAsyncResult<Self::Output>> {
-                    ::std::future::Future::poll(::std::pin::Pin::new(&mut self.future), context)
-                }
-            }
-
-            // Implement sending for the Sender trait.
-            //
-            // FIXME(pcwalton): Not sure if we need this?
-            impl ::cxx_async2::RustSender for [<RustSender $name>] {
-                type Output = $output;
-                fn send(&mut self, value: ::cxx_async2::CxxAsyncResult<$output>) {
-                    self.0.take().unwrap().send(value).unwrap()
-                }
-            }
-
-            // Define how to wrap concrete receivers in the `RustFuture` type.
-            impl ::std::convert::From<[<RustReceiver $name>]> for [<RustFuture $name>] {
-                fn from(receiver: [<RustReceiver $name>]) -> Self {
-                    Self {
-                        future: Box::pin(receiver),
-                    }
-                }
-            }
-
-            // Define how to wrap raw oneshot senders in the `RustSender` type.
-            impl ::std::convert::From<::futures::channel::oneshot::Sender<
-                    ::cxx_async2::CxxAsyncResult<$output>>> for [<RustSender $name>] {
-                fn from(sender: ::futures::channel::oneshot::Sender<::cxx_async2::CxxAsyncResult<
-                        $output>>) -> Self {
-                    Self(Some(sender))
-                }
-            }
-
-            // Define how to wrap raw Execlets in the `RustExeclet` type we just defined.
-            impl ::std::convert::From<::cxx_async2::Execlet<$output>> for [<RustExeclet $name>] {
-                fn from(execlet: ::cxx_async2::Execlet<$output>) -> Self {
-                    Self(execlet)
-                }
-            }
-
-            // Convenience wrappers so that client code doesn't have to import `IntoCxxAsyncFuture`.
-            impl [<RustFuture $name>] {
-                pub fn infallible<Fut>(future: Fut) -> Box<Self>
-                        where Fut: ::std::future::Future<Output = $output> + Send + 'static {
-                    <[<RustFuture $name>] as ::cxx_async2::IntoCxxAsyncFuture>::infallible(future)
-                }
-
-                pub fn fallible<Fut>(future: Fut) -> Box<Self>
-                        where Fut: ::std::future::Future<Output =
-                            ::cxx_async2::CxxAsyncResult<$output>> + Send + 'static {
-                    <[<RustFuture $name>] as ::cxx_async2::IntoCxxAsyncFuture>::fallible(future)
-                }
-            }
-
-            // The C++ bridge calls this to destroy a `RustSender`.
-            //
-            // I'm not sure if this can ever legitimately happen, but C++ wants to link to this
-            // function anyway, so let's provide it.
-            //
-            // SAFETY: This is a raw FFI function called by `cxx`. `cxx` ensures that `ptr` is a
-            // valid Box.
-            #[no_mangle]
-            pub unsafe extern "C" fn [<cxxasync_drop_box_rust_sender_ $name>](ptr: *mut
-                    Box<[<RustSender $name>]>) {
-                let mut boxed: ::std::mem::MaybeUninit<Box<[<RustSender $name>]>> =
-                    ::std::mem::MaybeUninit::uninit();
-                ::std::ptr::copy_nonoverlapping(ptr, boxed.as_mut_ptr(), 1);
-                drop(boxed.assume_init());
-            }
-
-            // The C++ bridge calls this to destroy an `Execlet`.
-            //
-            // SAFETY: This is a raw FFI function called by `cxx`. `cxx` ensures that `ptr` is a
-            // valid Box.
-            #[no_mangle]
-            #[doc(hidden)]
-            pub unsafe extern "C" fn [<cxxasync_drop_box_rust_execlet_ $name>](ptr: *mut
-                    Box<[<RustExeclet $name>]>) {
-                let mut boxed: ::std::mem::MaybeUninit<Box<[<RustExeclet $name>]>> =
-                    ::std::mem::MaybeUninit::uninit();
-                ::std::ptr::copy_nonoverlapping(ptr, boxed.as_mut_ptr(), 1);
-                drop(boxed.assume_init());
-            }
-
-            #[doc(hidden)]
-            #[no_mangle]
-            pub static [<cxx_async_vtable_ $name>]: ::cxx_async2::CxxAsyncVtable =
-                ::cxx_async2::CxxAsyncVtable {
-                    channel: ::cxx_async2::channel::<[<RustFuture $name>],
-                        [<RustSender $name>], [<RustReceiver $name>], $output> as *mut u8,
-                    sender_send: ::cxx_async2::sender_send::<[<RustSender $name>],
-                        $output> as *mut u8,
-                    future_poll: ::cxx_async2::future_poll::<$output,
-                        [<RustFuture $name>]> as *mut u8,
-                    execlet: ::cxx_async2::execlet_bundle::<[<RustFuture $name>],
-                        [<RustExeclet $name>], $output> as *mut u8,
-                    execlet_submit: ::cxx_async2::execlet_submit::<$output> as *mut u8,
-                    execlet_send: ::cxx_async2::execlet_send::<$output> as *mut u8,
-                };
-        }
-    };
 }
 
 // Creates a new oneshot sender/receiver pair.
