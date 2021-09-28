@@ -104,8 +104,9 @@ And likewise, define some asynchronous Rust code that C++ can call:
 
 ```rust
 use cxx_async::CxxAsyncResult;
-async fn hello_from_rust() -> CxxAsyncResult<String> {
-    Ok("Hello world!".to_owned())
+fn hello_from_rust() -> Box<RustFutureString> {
+    // You can instead use `fallible` if your async block returns a Result.
+    RustFutureString::infallible(async { "Hello world!".to_owned() })
 }
 ```
 

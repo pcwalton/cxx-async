@@ -59,7 +59,7 @@ class Execlet : public folly::Executor {
 // Usually you don't need to call this manually, because you can just `co_await` a Folly Task
 // inside a coroutine that returns a Rust Future (thanks to the magic of await transformers). For
 // example, instead of writing `cxx::async::folly_task_to_rust_future(foo())` you can just write
-// `co_return co_await foo()`;
+// `co_return co_await foo();`.
 template <typename Future>
 rust::Box<Future> folly_task_to_rust_future(folly::coro::Task<RustResultFor<Future>>&& task) {
     typedef RustExecletFor<Future> RustExeclet;
