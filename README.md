@@ -4,10 +4,9 @@
 
 `cxx-async` is a Rust crate that extends the [`cxx`](http://cxx.rs/) library to provide seamless
 interoperability between asynchronous Rust code using `async`/`await` and [C++20 coroutines]
-(https://en.cppreference.com/w/cpp/language/coroutines) using `co_await`. If your C++ code is
-asynchronous, `cxx-async` can provide a more convenient, and potentially more efficient,
-alternative to callbacks. You can freely convert between C++ coroutines and Rust futures and await
-one from the other.
+using `co_await`. If your C++ code is asynchronous, `cxx-async` can provide a more convenient, and
+potentially more efficient, alternative to callbacks. You can freely convert between C++ coroutines
+and Rust futures and await one from the other.
 
 It's important to emphasize what `cxx-async` isn't: it isn't a C++ binding to Tokio or any other
 Rust I/O library. Nor is it a Rust binding to `boost::asio` or similar. Such bindings could in
@@ -60,6 +59,7 @@ After the `#[cxx::bridge]` block, call the `define_cxx_future!` macro to define 
 types:
 
 ```rust
+use cxx_async::define_cxx_future;
 // The first argument is the name of the future type you declared, without the `RustFuture` prefix.
 // The second argument is the Rust type that this future yields.
 define_cxx_future!(String, String);
@@ -77,8 +77,8 @@ And add a call to the `CXXASYNC_DEFINE_FUTURE` macro to define the C++ side of t
 
 ```cpp
 // Arguments are the same as `define_cxx_future!` on the Rust side. Note that the second argument
-// is the C++ type that `cxx` maps your Rust type to: in this case, `String` mapped to
-// `rust::String`, so we supply `rust::String` here.
+// is the C++ type that `cxx` maps your Rust type to: in this case, `String` maps to `rust::String`,
+// so we supply `rust::String` here.
 CXXASYNC_DEFINE_FUTURE(String, rust::String);
 ```
 
@@ -125,3 +125,5 @@ Licensed under either of Apache License, Version 2.0 or MIT license at your opti
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in
 this project by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions. 
+
+[C++20 coroutines]: https://en.cppreference.com/w/cpp/language/coroutines
