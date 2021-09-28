@@ -32,11 +32,11 @@
         typedef RustExeclet##name Execlet;                                                  \
         typedef cxx::async::RustExecletBundle<RustFuture##name, Execlet> ExecletBundle;     \
         static const cxx::async::Vtable<RustFuture##name>* vtable() {                       \
-            return &cxxasync_vtable_RustFuture##name;                                                \
+            return &cxxasync_vtable_RustFuture##name;                                       \
         }                                                                                   \
     };                                                                                      \
     extern "C" void cxxasync_drop_box_rust_sender_RustFuture##name(rust::Box<RustSender##name>* ptr); \
-    extern "C" void cxxasync_drop_box_rust_execlet_RustFuture##name(                                  \
+    extern "C" void cxxasync_drop_box_rust_execlet_RustFuture##name(                        \
         rust::Box<RustExeclet##name>* ptr);                                                 \
     template <>                                                                             \
     void rust::Box<RustSender##name>::drop() noexcept {                                     \
