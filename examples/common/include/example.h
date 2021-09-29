@@ -1,7 +1,7 @@
-// cxx-async2/include/example.h
+// cxx-async/include/example.h
 
-#ifndef CXX_ASYNC2_EXAMPLE_H
-#define CXX_ASYNC2_EXAMPLE_H
+#ifndef CXX_ASYNC_EXAMPLE_H
+#define CXX_ASYNC_EXAMPLE_H
 
 #include <cstdint>
 
@@ -24,4 +24,4 @@ class Xorshift {
     }
 };
 
-#endif
+#endif  // CXX_ASYNC_EXAMPLE_H

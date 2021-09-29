@@ -1,4 +1,4 @@
-// cxx-async2/build.rs
+// cxx-async/build.rs
 
 use std::fs;
 

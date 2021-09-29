@@ -1,7 +1,7 @@
-// cxx-async2/examples/cppcoro/src/main.rs
+// cxx-async/examples/cppcoro/src/main.rs
 
 use async_recursion::async_recursion;
-use cxx_async2::CxxAsyncException;
+use cxx_async::CxxAsyncException;
 use futures::executor::{self, ThreadPool};
 use futures::join;
 use futures::task::SpawnExt;
@@ -30,9 +30,9 @@ mod ffi {
     }
 }
 
-#[cxx_async2::bridge_future]
+#[cxx_async::bridge_future]
 struct RustFutureF64(f64);
-#[cxx_async2::bridge_future]
+#[cxx_async::bridge_future]
 struct RustFutureString(String);
 
 const VECTOR_LENGTH: usize = 16384;

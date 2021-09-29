@@ -41,7 +41,7 @@ version = "0.1.0"
 dependencies = [
  "async-recursion",
  "cxx",
- "cxx-async2",
+ "cxx-async",
  "cxx-build",
  "futures",
  "once_cell",
@@ -61,15 +61,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "cxx-async-macro"
-version = "0.1.0"
-dependencies = [
- "quote",
- "syn",
-]
-
-[[package]]
-name = "cxx-async2"
+name = "cxx-async"
 version = "0.1.0"
 dependencies = [
  "async-recursion",
@@ -81,6 +73,14 @@ dependencies = [
  "once_cell",
  "pin-utils",
  "pkg-config",
+]
+
+[[package]]
+name = "cxx-async-macro"
+version = "0.1.0"
+dependencies = [
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -121,7 +121,7 @@ version = "0.1.0"
 dependencies = [
  "async-recursion",
  "cxx",
- "cxx-async2",
+ "cxx-async",
  "cxx-build",
  "futures",
  "once_cell",

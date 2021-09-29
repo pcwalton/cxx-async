@@ -1,4 +1,4 @@
-// cxx-async2/src/main.rs
+// cxx-async/src/main.rs
 //
 //! `cxx-async` is a Rust crate that extends the cxx library to provide seamless interoperability
 //! between asynchronous Rust code using `async`/`await` and C++20 coroutines using `co_await`. If

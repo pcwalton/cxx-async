@@ -1,7 +1,7 @@
-// cxx-async2/include/cxx_async_waker.h
+// cxx-async/include/cxx_async_waker.h
 
-#ifndef CXX_ASYNC2_CXX_ASYNC_WAKER_H
-#define CXX_ASYNC2_CXX_ASYNC_WAKER_H
+#ifndef CXX_ASYNC_CXX_ASYNC_WAKER_H
+#define CXX_ASYNC_CXX_ASYNC_WAKER_H
 
 #include <cstdint>
 
@@ -16,4 +16,4 @@ void suspended_coroutine_drop(uint8_t* address);
 }  // namespace async
 }  // namespace cxx
 
-#endif
+#endif  // CXX_ASYNC_CXX_ASYNC_WAKER_H

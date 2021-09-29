@@ -1,4 +1,4 @@
-// cxx-async2/examples/cppcoro/src/cppcoro_example.cpp
+// cxx-async/examples/cppcoro/src/cppcoro_example.cpp
 
 #include <cppcoro/schedule_on.hpp>
 #include <cppcoro/static_thread_pool.hpp>

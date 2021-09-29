@@ -1,8 +1,8 @@
-// cxx-async2/src/cxx_async.cpp
+// cxx-async/src/cxx_async.cpp
 
 #include "cxx_async.h"
 #include <cstdint>
-#include "cxx-async2/src/lib.rs.h"
+#include "cxx-async/src/lib.rs.h"
 
 namespace cxx {
 namespace async {

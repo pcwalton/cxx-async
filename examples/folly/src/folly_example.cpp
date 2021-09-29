@@ -1,4 +1,4 @@
-// cxx-async2/examples/folly/src/folly_example.cpp
+// cxx-async/examples/folly/src/folly_example.cpp
 
 #define FOLLY_HAS_COROUTINES 1
 

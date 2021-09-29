@@ -1,7 +1,7 @@
-// cxx-async2/include/cppcoro_example.h
+// cxx-async/include/cppcoro_example.h
 
-#ifndef CXX_ASYNC2_CPPCORO_EXAMPLE_H
-#define CXX_ASYNC2_CPPCORO_EXAMPLE_H
+#ifndef CXX_ASYNC_CPPCORO_EXAMPLE_H
+#define CXX_ASYNC_CPPCORO_EXAMPLE_H
 
 #include "rust/cxx.h"
 
@@ -15,4 +15,4 @@ rust::Box<RustFutureF64> cppcoro_not_product();
 void cppcoro_call_rust_not_product();
 rust::Box<RustFutureString> cppcoro_ping_pong(int i);
 
-#endif
+#endif  // CXX_ASYNC_CPPCORO_EXAMPLE_H

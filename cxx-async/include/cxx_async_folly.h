@@ -1,7 +1,7 @@
-// cxx-async2/include/cxx_async_folly.h
+// cxx-async/include/cxx_async_folly.h
 
-#ifndef CXX_ASYNC2_CXX_ASYNC_FOLLY_H
-#define CXX_ASYNC2_CXX_ASYNC_FOLLY_H
+#ifndef CXX_ASYNC_CXX_ASYNC_FOLLY_H
+#define CXX_ASYNC_CXX_ASYNC_FOLLY_H
 
 #include <folly/Executor.h>
 #include <folly/Try.h>
@@ -97,4 +97,4 @@ class AwaitTransformer<folly::coro::Task<Result>, Future> {
 }  // namespace async
 }  // namespace cxx
 
-#endif
+#endif  // CXX_ASYNC_CXX_ASYNC_FOLLY_H

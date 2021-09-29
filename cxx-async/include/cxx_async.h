@@ -1,7 +1,7 @@
-// cxx-async2/include/cxx_async.h
+// cxx-async/include/cxx_async.h
 
-#ifndef CXX_ASYNC2_CXX_ASYNC_H
-#define CXX_ASYNC2_CXX_ASYNC_H
+#ifndef CXX_ASYNC_CXX_ASYNC_H
+#define CXX_ASYNC_CXX_ASYNC_H
 
 #include <atomic>
 #include <cstdint>
@@ -353,4 +353,4 @@ struct std::experimental::coroutine_traits<rust::Box<Future>, Args...> {
     using promise_type = cxx::async::RustPromise<Future>;
 };
 
-#endif
+#endif  // CXX_ASYNC_CXX_ASYNC_H

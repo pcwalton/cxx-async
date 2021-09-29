@@ -1,4 +1,4 @@
-// cxx-async2/examples/folly/build.rs
+// cxx-async/examples/folly/build.rs
 
 use pkg_config::Config;
 use std::path::PathBuf;

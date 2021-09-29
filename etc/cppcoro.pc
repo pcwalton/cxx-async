@@ -1,4 +1,4 @@
-# cxx-async2/etc/cppcoro.pc
+# cxx-async/etc/cppcoro.pc
 #
 # `cppcoro` doesn't come with an install script, so you may need to tell `cxx-async` where to find
 # it. You can use this `pkg-config` file as a template. Change the `prefix` variable as needed.

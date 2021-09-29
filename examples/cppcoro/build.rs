@@ -1,4 +1,4 @@
-// cxx-async2/examples/cppcoro/build.rs
+// cxx-async/examples/cppcoro/build.rs
 
 use pkg_config::Config;
 
