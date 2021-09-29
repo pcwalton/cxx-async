@@ -18,13 +18,9 @@
 #define CXXASYNC_ASSERT(cond) ::cxx::async::cxxasync_assert(cond)
 
 #define CXXASYNC_DEFINE_FUTURE(name, type)                                      \
-    extern const cxx::async::Vtable<name> cxxasync_vtable_##name;               \
     template <>                                                                 \
     struct cxx::async::RustFutureTraits<name> {                                 \
         typedef type Result;                                                    \
-        static const cxx::async::Vtable<name>* vtable() {                       \
-            return &cxxasync_vtable_##name;                                     \
-        }                                                                       \
     };                                                                                      
 
 namespace cxx {
@@ -34,26 +30,27 @@ namespace async {
 template <typename Future>
 class RustFutureTraits {};
 
+template<typename Future>
+struct Vtable;
+
+template<typename Future>
+class FutureVtableProvider {
+public:
+    static const cxx::async::Vtable<Future>* vtable();
+};
+
 // FIXME(pcwalton): Sender and Execlet being incomplete types is awfully weird.
 template<typename Future>
 class RustSender;
 template<typename Future>
 class RustExeclet;
-template<typename Future, typename Execlet>
+template<typename Future>
 struct RustExecletBundle;
-template<typename Future, typename Sender>
+template<typename Future>
 struct RustOneshot;
 
 template <typename Future>
-using RustExecletFor = RustExeclet<Future>;
-template <typename Future>
-using RustExecletBundleFor = RustExecletBundle<Future, RustExeclet<Future>>;
-template <typename Future>
-using RustOneshotFor = RustOneshot<Future, RustSender<Future>>;
-template <typename Future>
 using RustResultFor = typename RustFutureTraits<Future>::Result;
-template <typename Future>
-using RustSenderFor = RustSender<Future>;
 
 class SuspendedCoroutine;
 
@@ -87,18 +84,18 @@ class AwaitTransformer {
 
 template <typename Future>
 struct Vtable {
-    RustOneshotFor<Future> (*channel)();
-    void (*sender_send)(RustSenderFor<Future>& self, uint32_t status, const void* value);
+    RustOneshot<Future> (*channel)();
+    void (*sender_send)(RustSender<Future>& self, uint32_t status, const void* value);
     uint32_t (*future_poll)(Future& self, void* result, const void* waker_data);
-    RustExecletBundleFor<Future> (*execlet)();
-    void (*execlet_submit)(const RustExecletFor<Future>& self, void (*run)(void*), void* task);
-    void (*execlet_send)(const RustExecletFor<Future> &self, uint32_t status, const void* value);
+    RustExecletBundle<Future> (*execlet)();
+    void (*execlet_submit)(const RustExeclet<Future>& self, void (*run)(void*), void* task);
+    void (*execlet_send)(const RustExeclet<Future> &self, uint32_t status, const void* value);
 };
 
-template <typename Future, typename Sender>
+template <typename Future>
 struct RustOneshot {
     rust::Box<Future> future;
-    rust::Box<Sender> sender;
+    rust::Box<RustSender<Future>> sender;
 };
 
 // A temporary place to hold future results or errors that are sent to or returned from Rust.
@@ -269,13 +266,13 @@ class SuspendedCoroutine {
 // coroutine.
 template <typename Future>
 class RustPromise {
-    typedef RustOneshotFor<Future> Oneshot;
+    typedef RustOneshot<Future> Oneshot;
     typedef RustResultFor<Future> Result;
 
     Oneshot m_oneshot;
 
    public:
-    RustPromise() : m_oneshot(RustFutureTraits<Future>::vtable()->channel()) {}
+    RustPromise() : m_oneshot(FutureVtableProvider<Future>::vtable()->channel()) {}
 
     rust::Box<Future> get_return_object() noexcept { return std::move(m_oneshot.future); }
 
@@ -286,13 +283,13 @@ class RustPromise {
     void return_value(Result&& value) {
         RustFutureResult<Future> result;
         new (&result.m_result) Result(std::move(value));
-        RustFutureTraits<Future>::vtable()->sender_send(
+        FutureVtableProvider<Future>::vtable()->sender_send(
             *m_oneshot.sender, static_cast<uint32_t>(FuturePollStatus::Complete),
             reinterpret_cast<const uint8_t*>(&result));
     }
 
     void unhandled_exception() noexcept {
-        const Vtable<Future>* vtable = RustFutureTraits<Future>::vtable();
+        const Vtable<Future>* vtable = FutureVtableProvider<Future>::vtable();
         try {
             std::rethrow_exception(std::current_exception());
         } catch (const std::exception& exception) {
@@ -323,7 +320,7 @@ FutureWakeStatus RustFutureReceiver<Future>::wake(SuspendedCoroutine* coroutine)
     }
 
     m_status = static_cast<FuturePollStatus>(
-        RustFutureTraits<Future>::vtable()->future_poll(*m_future, &m_result, coroutine));
+        FutureVtableProvider<Future>::vtable()->future_poll(*m_future, &m_result, coroutine));
     return static_cast<FutureWakeStatus>(m_status);
 }
 

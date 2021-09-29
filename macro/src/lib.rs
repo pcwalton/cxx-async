@@ -40,8 +40,21 @@ pub fn bridge_future(_: TokenStream, item: TokenStream) -> TokenStream {
         &mangle_drop_glue("RustExeclet", &future_name_string),
         future.span(),
     );
-
-    let vtable = Ident::new(&format!("cxxasync_vtable_{}", future), future.span());
+    let vtable_glue = Ident::new(
+        &mangle_cxx_name(&[
+            CxxNameToken::StartQName,
+            CxxNameToken::Name("cxx"),
+            CxxNameToken::Name("async"),
+            CxxNameToken::Name("FutureVtableProvider"),
+            CxxNameToken::StartTemplate,
+            CxxNameToken::Name(&future_name_string),
+            CxxNameToken::EndTemplate,
+            CxxNameToken::Name("vtable"),
+            CxxNameToken::EndQName,
+            CxxNameToken::VoidArg,
+        ]),
+        future.span()
+    );
 
     quote! {
         /// A future shared between Rust and C++.
@@ -181,23 +194,25 @@ pub fn bridge_future(_: TokenStream, item: TokenStream) -> TokenStream {
             drop(boxed.assume_init());
         }
 
-        #[doc(hidden)]
         #[no_mangle]
-        pub static #vtable: ::cxx_async2::CxxAsyncVtable = ::cxx_async2::CxxAsyncVtable {
-            channel: ::cxx_async2::channel::<#future, #sender, #receiver, #output> as *mut u8,
-            sender_send: ::cxx_async2::sender_send::<#sender, #output> as *mut u8,
-            future_poll: ::cxx_async2::future_poll::<#output, #future> as *mut u8,
-            execlet: ::cxx_async2::execlet_bundle::<#future, #execlet, #output> as *mut u8,
-            execlet_submit: ::cxx_async2::execlet_submit::<#output> as *mut u8,
-            execlet_send: ::cxx_async2::execlet_send::<#output> as *mut u8,
-        };
+        #[doc(hidden)]
+        pub unsafe extern "C" fn #vtable_glue() -> *const ::cxx_async2::CxxAsyncVtable {
+            static VTABLE: ::cxx_async2::CxxAsyncVtable = ::cxx_async2::CxxAsyncVtable {
+                channel: ::cxx_async2::channel::<#future, #sender, #receiver, #output> as *mut u8,
+                sender_send: ::cxx_async2::sender_send::<#sender, #output> as *mut u8,
+                future_poll: ::cxx_async2::future_poll::<#output, #future> as *mut u8,
+                execlet: ::cxx_async2::execlet_bundle::<#future, #execlet, #output> as *mut u8,
+                execlet_submit: ::cxx_async2::execlet_submit::<#output> as *mut u8,
+                execlet_send: ::cxx_async2::execlet_send::<#output> as *mut u8,
+            };
+            return &VTABLE;
+        }
     }
     .into()
 }
 
 fn mangle_drop_glue(name: &str, future: &str) -> String {
     mangle_cxx_name(&[
-        CxxNameToken::StartFunction,
         CxxNameToken::StartQName,
         CxxNameToken::Name("rust"),
         CxxNameToken::Name("cxxbridge1"),
@@ -222,7 +237,6 @@ enum CxxNameToken<'a> {
     Name(&'a str),
     StartQName,
     EndQName,
-    StartFunction,
     StartTemplate,
     EndTemplate,
     VoidArg,
@@ -232,12 +246,11 @@ enum CxxNameToken<'a> {
 //
 // TODO(pcwalton): MSVC mangling.
 fn mangle_cxx_name(tokens: &[CxxNameToken]) -> String {
-    let mut string = String::new();
+    let mut string = "_Z".to_owned();
     for token in tokens {
         match *token {
             CxxNameToken::Name(name) => write!(&mut string, "{}{}", name.len(), name).unwrap(),
             CxxNameToken::StartQName => string.push_str("N"),
-            CxxNameToken::StartFunction => string.push_str("_Z"),
             CxxNameToken::EndQName => string.push_str("E"),
             CxxNameToken::StartTemplate => string.push_str("I"),
             CxxNameToken::EndTemplate => string.push_str("E"),

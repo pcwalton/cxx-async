@@ -8,7 +8,7 @@
 namespace cxx {
 namespace async {
 
-template<typename Future, typename Execlet>
+template<typename Future>
 struct RustExecletBundle {};
 
 template<typename Future>
