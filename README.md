@@ -36,7 +36,7 @@ Now, inside your `#[cxx::bridge]` module, declare a future type and some methods
 ```rust
 #[cxx::bridge]
 mod ffi {
-    // Declare any future types you wish to bridge. They must begin with `RustFuture`.
+    // Give each future type that you want to bridge a name.
     extern "Rust" {
         type RustFutureString;
     }
@@ -55,14 +55,13 @@ mod ffi {
 }
 ```
 
-After the `#[cxx::bridge]` block, call the `define_cxx_future!` macro to define any `RustFuture`
-types:
+After the `#[cxx::bridge]` block, define the future types using the `#[cxx_async::bridge_future]`
+attribute:
 
 ```rust
-use cxx_async::define_cxx_future;
-// The first argument is the name of the future type you declared, without the `RustFuture` prefix.
-// The second argument is the Rust type that this future yields.
-define_cxx_future!(String, String);
+// The inner type is the Rust type that this future yields.
+#[cxx_async::bridge_future]
+struct RustFutureString(String);
 ```
 
 Now, in your C++ file, make sure to `#include` the right headers:
@@ -76,10 +75,10 @@ Now, in your C++ file, make sure to `#include` the right headers:
 And add a call to the `CXXASYNC_DEFINE_FUTURE` macro to define the C++ side of the future:
 
 ```cpp
-// Arguments are the same as `define_cxx_future!` on the Rust side. Note that the second argument
-// is the C++ type that `cxx` maps your Rust type to: in this case, `String` maps to `rust::String`,
-// so we supply `rust::String` here.
-CXXASYNC_DEFINE_FUTURE(String, rust::String);
+// The first argument is the name you gave the future, and the second argument is the corresponding
+// C++ type. The latter is the C++ type that `cxx` maps your Rust type to: in this case, `String`
+// maps to `rust::String`, so we supply `rust::String` here.
+CXXASYNC_DEFINE_FUTURE(RustFutureString, rust::String);
 ```
 
 You're all set! Now you can define asynchronous C++ code that Rust can call:
