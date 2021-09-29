@@ -6,6 +6,7 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
+use std::fmt::Write;
 use syn::{Fields, Ident, ItemStruct};
 
 #[proc_macro_attribute]
@@ -25,13 +26,21 @@ pub fn bridge_future(_: TokenStream, item: TokenStream) -> TokenStream {
     };
 
     let future = struct_item.ident;
+    let future_name_string = format!("{}", future);
+
     let sender = Ident::new(&format!("{}Sender", future), future.span());
     let receiver = Ident::new(&format!("{}Receiver", future), future.span());
     let execlet = Ident::new(&format!("{}Execlet", future), future.span());
-    let drop_sender_glue = Ident::new(&format!("cxxasync_drop_box_rust_sender_{}",
-        future), future.span());
-    let drop_execlet_glue = Ident::new(&format!("cxxasync_drop_box_rust_execlet_{}",
-        future), future.span());
+
+    let drop_sender_glue = Ident::new(
+        &mangle_drop_glue("RustSender", &future_name_string),
+        future.span(),
+    );
+    let drop_execlet_glue = Ident::new(
+        &mangle_drop_glue("RustExeclet", &future_name_string),
+        future.span(),
+    );
+
     let vtable = Ident::new(&format!("cxxasync_vtable_{}", future), future.span());
 
     quote! {
@@ -182,5 +191,58 @@ pub fn bridge_future(_: TokenStream, item: TokenStream) -> TokenStream {
             execlet_submit: ::cxx_async2::execlet_submit::<#output> as *mut u8,
             execlet_send: ::cxx_async2::execlet_send::<#output> as *mut u8,
         };
-    }.into()
+    }
+    .into()
+}
+
+fn mangle_drop_glue(name: &str, future: &str) -> String {
+    mangle_cxx_name(&[
+        CxxNameToken::StartFunction,
+        CxxNameToken::StartQName,
+        CxxNameToken::Name("rust"),
+        CxxNameToken::Name("cxxbridge1"),
+        CxxNameToken::Name("Box"),
+        CxxNameToken::StartTemplate,
+        CxxNameToken::StartQName,
+        CxxNameToken::Name("cxx"),
+        CxxNameToken::Name("async"),
+        CxxNameToken::Name(name),
+        CxxNameToken::StartTemplate,
+        CxxNameToken::Name(future),
+        CxxNameToken::EndTemplate,
+        CxxNameToken::EndQName,
+        CxxNameToken::EndTemplate,
+        CxxNameToken::Name("drop"),
+        CxxNameToken::EndQName,
+        CxxNameToken::VoidArg,
+    ])
+}
+
+enum CxxNameToken<'a> {
+    Name(&'a str),
+    StartQName,
+    EndQName,
+    StartFunction,
+    StartTemplate,
+    EndTemplate,
+    VoidArg,
+}
+
+// Mangles a C++ name.
+//
+// TODO(pcwalton): MSVC mangling.
+fn mangle_cxx_name(tokens: &[CxxNameToken]) -> String {
+    let mut string = String::new();
+    for token in tokens {
+        match *token {
+            CxxNameToken::Name(name) => write!(&mut string, "{}{}", name.len(), name).unwrap(),
+            CxxNameToken::StartQName => string.push_str("N"),
+            CxxNameToken::StartFunction => string.push_str("_Z"),
+            CxxNameToken::EndQName => string.push_str("E"),
+            CxxNameToken::StartTemplate => string.push_str("I"),
+            CxxNameToken::EndTemplate => string.push_str("E"),
+            CxxNameToken::VoidArg => string.push_str("v"),
+        }
+    }
+    string
 }

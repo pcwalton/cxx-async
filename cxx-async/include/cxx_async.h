@@ -17,35 +17,15 @@
 
 #define CXXASYNC_ASSERT(cond) ::cxx::async::cxxasync_assert(cond)
 
-// FIXME(pcwalton): Defining the `Box::drop()` specialization here is a botch.
-// FIXME(pcwalton): Sender and Execlet being incomplete types is awfully weird.
-#define CXXASYNC_DEFINE_FUTURE(name, type)                                                  \
-    extern const cxx::async::Vtable<RustFuture##name> cxxasync_vtable_RustFuture##name;    \
-    class RustSender##name;                                                                 \
-    class RustExeclet##name;                                                                \
-    template <>                                                                             \
-    class cxx::async::RustFutureTraits<RustFuture##name> {                                  \
-       public:                                                                              \
-        typedef type Result;                                                                \
-        typedef RustSender##name Sender;                                                    \
-        typedef cxx::async::RustOneshot<RustFuture##name, Sender> Oneshot;                  \
-        typedef RustExeclet##name Execlet;                                                  \
-        typedef cxx::async::RustExecletBundle<RustFuture##name, Execlet> ExecletBundle;     \
-        static const cxx::async::Vtable<RustFuture##name>* vtable() {                       \
-            return &cxxasync_vtable_RustFuture##name;                                       \
-        }                                                                                   \
-    };                                                                                      \
-    extern "C" void cxxasync_drop_box_rust_sender_RustFuture##name(rust::Box<RustSender##name>* ptr); \
-    extern "C" void cxxasync_drop_box_rust_execlet_RustFuture##name(                        \
-        rust::Box<RustExeclet##name>* ptr);                                                 \
-    template <>                                                                             \
-    void rust::Box<RustSender##name>::drop() noexcept {                                     \
-        cxxasync_drop_box_rust_sender_RustFuture##name(this);                               \
-    }                                                                                       \
-    template <>                                                                             \
-    void rust::Box<RustExeclet##name>::drop() noexcept {                                    \
-        cxxasync_drop_box_rust_execlet_RustFuture##name(this);                              \
-    }
+#define CXXASYNC_DEFINE_FUTURE(name, type)                                      \
+    extern const cxx::async::Vtable<name> cxxasync_vtable_##name;               \
+    template <>                                                                 \
+    struct cxx::async::RustFutureTraits<name> {                                 \
+        typedef type Result;                                                    \
+        static const cxx::async::Vtable<name>* vtable() {                       \
+            return &cxxasync_vtable_##name;                                     \
+        }                                                                       \
+    };                                                                                      
 
 namespace cxx {
 namespace async {
@@ -54,16 +34,26 @@ namespace async {
 template <typename Future>
 class RustFutureTraits {};
 
+// FIXME(pcwalton): Sender and Execlet being incomplete types is awfully weird.
+template<typename Future>
+class RustSender;
+template<typename Future>
+class RustExeclet;
+template<typename Future, typename Execlet>
+struct RustExecletBundle;
+template<typename Future, typename Sender>
+struct RustOneshot;
+
 template <typename Future>
-using RustExecletFor = typename RustFutureTraits<Future>::Execlet;
+using RustExecletFor = RustExeclet<Future>;
 template <typename Future>
-using RustExecletBundleFor = typename RustFutureTraits<Future>::ExecletBundle;
+using RustExecletBundleFor = RustExecletBundle<Future, RustExeclet<Future>>;
 template <typename Future>
-using RustOneshotFor = typename RustFutureTraits<Future>::Oneshot;
+using RustOneshotFor = RustOneshot<Future, RustSender<Future>>;
 template <typename Future>
 using RustResultFor = typename RustFutureTraits<Future>::Result;
 template <typename Future>
-using RustSenderFor = typename RustFutureTraits<Future>::Sender;
+using RustSenderFor = RustSender<Future>;
 
 class SuspendedCoroutine;
 

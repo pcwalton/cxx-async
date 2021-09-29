@@ -5,7 +5,7 @@
 //! your C++ code is asynchronous, `cxx-async` can provide a more convenient, and potentially more
 //! efficient, alternative to callbacks. You can freely convert between C++ coroutines and Rust
 //! futures and await one from the other.
-//! 
+//!
 //! It's important to emphasize what `cxx-async` isn't: it isn't a C++ binding to Tokio or any
 //! other Rust I/O library. Nor is it a Rust binding to `boost::asio` or similar. Such bindings
 //! could in principle be layered on top of `cxx-async` if desired, but this crate doesn't provide
@@ -14,7 +14,7 @@
 //! C++ async I/O code tends to be tightly coupled to libraries like `boost::asio`.) If you're
 //! writing server code, you can still use `cxx-async`, but you will need to ensure that both the
 //! Rust and C++ sides run separate I/O executors.
-//! 
+//!
 //! `cxx-async` aims for compatibility with popular C++ coroutine support libraries. Right now,
 //! both the lightweight [`cppcoro`](https://github.com/lewissbaker/cppcoro) and the more
 //! comprehensive [Folly](https://github.com/facebook/folly/) are supported. Patches are welcome to
@@ -126,7 +126,7 @@ unsafe impl Send for CxxAsyncVtable {}
 unsafe impl Sync for CxxAsyncVtable {}
 
 // A sender/receiver pair for the return value of a wrapped C++ coroutine.
-// 
+//
 // This is an implementation detail and is not exposed to the programmer. It must match the
 // definition in `cxx_async.h`.
 #[repr(C)]
@@ -188,7 +188,7 @@ pub trait CxxAsyncFuture {
 // An execlet and a future that extracts the return value from it.
 //
 // Execlets are used to drive Folly semi-futures from the Rust polling interface.
-// 
+//
 // This is an implementation detail and is not exposed to the programmer. It must match the
 // definition in `cxx_async.h`.
 #[doc(hidden)]
@@ -495,11 +495,8 @@ pub unsafe extern "C" fn execlet_submit<Output>(
 //
 // SAFETY: This is a low-level function called by our C++ code.
 #[doc(hidden)]
-pub unsafe extern "C" fn execlet_send<Output>(
-    this: &Execlet<Output>,
-    status: u32,
-    value: *const u8,
-) where
+pub unsafe extern "C" fn execlet_send<Output>(this: &Execlet<Output>, status: u32, value: *const u8)
+where
     Output: Clone,
 {
     let mut this = this.0.lock().unwrap();

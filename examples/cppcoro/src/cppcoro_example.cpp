@@ -13,8 +13,8 @@
 #include "example.h"
 #include "rust/cxx.h"
 
-CXXASYNC_DEFINE_FUTURE(F64, double);
-CXXASYNC_DEFINE_FUTURE(String, rust::String);
+CXXASYNC_DEFINE_FUTURE(RustFutureF64, double);
+CXXASYNC_DEFINE_FUTURE(RustFutureString, rust::String);
 
 const size_t EXAMPLE_SPLIT_LIMIT = 32;
 const size_t EXAMPLE_ARRAY_SIZE = 16384;
