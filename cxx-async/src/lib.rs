@@ -572,10 +572,8 @@ pub unsafe extern "C" fn execlet_submit<Output>(
     this.runqueue.push_back(ExecletTask::new(run, task_data));
     if let Some(ref waker) = this.waker {
         // Avoid possible deadlocks.
-        // FIXME(pcwalton): Is this necessary?
         let waker = (*waker).clone();
         drop(this);
-
         waker.wake_by_ref();
     }
 }
