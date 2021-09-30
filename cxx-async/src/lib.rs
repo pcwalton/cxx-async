@@ -24,10 +24,6 @@
 
 extern crate link_cplusplus;
 
-use crate::ffi::{
-    suspended_coroutine_clone, suspended_coroutine_drop, suspended_coroutine_wake,
-    suspended_coroutine_wake_by_ref,
-};
 use futures::channel::oneshot::{
     self, Canceled, Receiver as OneshotReceiver, Sender as OneshotSender,
 };
@@ -53,18 +49,11 @@ pub use cxx_async_macro::bridge_future;
 pub use pin_utils::unsafe_pinned;
 
 // Bridged glue functions.
-#[cxx::bridge]
-mod ffi {
-    // General
-
-    #[namespace = "cxx::async"]
-    unsafe extern "C++" {
-        include!("cxx_async_waker.h");
-        unsafe fn suspended_coroutine_clone(waker_data: *mut u8) -> *mut u8;
-        unsafe fn suspended_coroutine_wake(waker_data: *mut u8);
-        unsafe fn suspended_coroutine_wake_by_ref(waker_data: *mut u8);
-        unsafe fn suspended_coroutine_drop(waker_data: *mut u8);
-    }
+extern "C" {
+    fn cxxasync_suspended_coroutine_clone(waker_data: *mut u8) -> *mut u8;
+    fn cxxasync_suspended_coroutine_wake(waker_data: *mut u8);
+    fn cxxasync_suspended_coroutine_wake_by_ref(waker_data: *mut u8);
+    fn cxxasync_suspended_coroutine_drop(waker_data: *mut u8);
 }
 
 // A suspended C++ coroutine needs to act as a waker if it awaits a Rust future. This vtable
@@ -518,7 +507,7 @@ where
 // SAFETY: This is a raw FFI function called by the currently-running Rust executor.
 unsafe fn rust_suspended_coroutine_clone(address: *const ()) -> RawWaker {
     RawWaker::new(
-        suspended_coroutine_clone(address as *mut () as *mut u8) as *mut () as *const (),
+        cxxasync_suspended_coroutine_clone(address as *mut () as *mut u8) as *mut () as *const (),
         &CXXASYNC_WAKER_VTABLE,
     )
 }
@@ -527,19 +516,19 @@ unsafe fn rust_suspended_coroutine_clone(address: *const ()) -> RawWaker {
 //
 // SAFETY: This is a raw FFI function called by the currently-running Rust executor.
 unsafe fn rust_suspended_coroutine_wake(address: *const ()) {
-    suspended_coroutine_wake(address as *mut () as *mut u8)
+    cxxasync_suspended_coroutine_wake(address as *mut () as *mut u8)
 }
 
 // Resumes a suspended C++ coroutine without decrementing its reference count.
 //
 // SAFETY: This is a raw FFI function called by the currently-running Rust executor.
 unsafe fn rust_suspended_coroutine_wake_by_ref(address: *const ()) {
-    suspended_coroutine_wake_by_ref(address as *mut () as *mut u8)
+    cxxasync_suspended_coroutine_wake_by_ref(address as *mut () as *mut u8)
 }
 
 // Decrements the reference count on a suspended C++ coroutine.
 //
 // SAFETY: This is a raw FFI function called by the currently-running Rust executor.
 unsafe fn rust_suspended_coroutine_drop(address: *const ()) {
-    suspended_coroutine_drop(address as *mut () as *mut u8)
+    cxxasync_suspended_coroutine_drop(address as *mut () as *mut u8)
 }

@@ -53,7 +53,7 @@ pub fn bridge_future(_: TokenStream, item: TokenStream) -> TokenStream {
             CxxNameToken::EndQName,
             CxxNameToken::VoidArg,
         ]),
-        future.span()
+        future.span(),
     );
 
     quote! {

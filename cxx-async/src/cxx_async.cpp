@@ -1,9 +1,10 @@
 // cxx-async/src/cxx_async.cpp
+//
+// Glue functions for C++/Rust async interoperability.
 
 #include "cxx_async.h"
 #include <cstdint>
 #include <cstdlib>
-#include "cxx_async_waker.h"
 
 namespace cxx {
 namespace async {
@@ -13,24 +14,26 @@ void cxxasync_assert(bool cond) {
         abort();
 }
 
-uint8_t* suspended_coroutine_clone(uint8_t* ptr) {
-    return reinterpret_cast<uint8_t*>(reinterpret_cast<SuspendedCoroutine*>(ptr)->add_ref());
+}  // namespace async
+}  // namespace cxx
+
+extern "C" uint8_t* cxxasync_suspended_coroutine_clone(uint8_t* ptr) {
+    return reinterpret_cast<uint8_t*>(
+        reinterpret_cast<cxx::async::SuspendedCoroutine*>(ptr)->add_ref());
 }
 
-void suspended_coroutine_wake(uint8_t* ptr) {
-    suspended_coroutine_wake_by_ref(ptr);
-    suspended_coroutine_drop(ptr);
+extern "C" void cxxasync_suspended_coroutine_drop(uint8_t* address) {
+    reinterpret_cast<cxx::async::SuspendedCoroutine*>(address)->release();
 }
 
-void suspended_coroutine_wake_by_ref(uint8_t* ptr) {
-    SuspendedCoroutine* coroutine = reinterpret_cast<SuspendedCoroutine*>(ptr);
+extern "C" void cxxasync_suspended_coroutine_wake_by_ref(uint8_t* ptr) {
+    cxx::async::SuspendedCoroutine* coroutine =
+        reinterpret_cast<cxx::async::SuspendedCoroutine*>(ptr);
     if (wake_status_is_done(coroutine->wake()))
         coroutine->resume();
 }
 
-void suspended_coroutine_drop(uint8_t* address) {
-    reinterpret_cast<SuspendedCoroutine*>(address)->release();
+extern "C" void cxxasync_suspended_coroutine_wake(uint8_t* ptr) {
+    cxxasync_suspended_coroutine_wake_by_ref(ptr);
+    cxxasync_suspended_coroutine_drop(ptr);
 }
-
-}  // namespace async
-}  // namespace cxx

@@ -113,7 +113,10 @@ fn rust_folly_ping_pong(i: i32) -> Box<RustFutureString> {
 // Tests Rust calling C++ synchronously.
 #[test]
 fn test_rust_calling_cpp_synchronously() {
-    assert_eq!(executor::block_on(ffi::folly_dot_product()).unwrap(), 75719554055754070000000.0);
+    assert_eq!(
+        executor::block_on(ffi::folly_dot_product()).unwrap(),
+        75719554055754070000000.0
+    );
 }
 
 // Tests Rust calling C++ on a scheduler.
@@ -127,13 +130,19 @@ fn test_rust_calling_cpp_on_scheduler() {
 // Tests C++ calling async Rust code synchronously.
 #[test]
 fn test_cpp_calling_rust_synchronously() {
-    assert_eq!(ffi::folly_call_rust_dot_product(), 75719554055754070000000.0);
+    assert_eq!(
+        ffi::folly_call_rust_dot_product(),
+        75719554055754070000000.0
+    );
 }
 
 // Tests C++ calling async Rust code on a scheduler.
 #[test]
 fn test_cpp_calling_rust_on_scheduler() {
-    assert_eq!(ffi::folly_schedule_rust_dot_product(), 75719554055754070000000.0);
+    assert_eq!(
+        ffi::folly_schedule_rust_dot_product(),
+        75719554055754070000000.0
+    );
 }
 
 // Tests Rust calling async C++ code throwing exceptions.
@@ -157,7 +166,6 @@ fn test_ping_pong() {
     let result = executor::block_on(ffi::folly_ping_pong(0)).unwrap();
     assert_eq!(result, "ping pong ping pong ping pong ping pong ping pong ");
 }
-
 
 fn main() {
     // Test Rust calling C++ async functions, both synchronously and via a scheduler.

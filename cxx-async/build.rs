@@ -1,6 +1,7 @@
 // cxx-async/build.rs
 
 use std::fs;
+use std::path::PathBuf;
 
 fn main() {
     let sources = vec!["src/cxx_async.cpp"];
@@ -15,7 +16,8 @@ fn main() {
         }
     }
 
-    cxx_build::bridge("src/lib.rs")
+    let no_bridges: Vec<PathBuf> = vec![];
+    cxx_build::bridges(no_bridges)
         .files(&sources)
         .include("include")
         .compile("cxx-async");
