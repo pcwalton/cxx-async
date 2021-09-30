@@ -1,20 +1,40 @@
 // cxx-async/examples/folly/src/folly_example.cpp
+//
+// An example showing how to interoperate with Folly.
 
 #define FOLLY_HAS_COROUTINES 1
 
+#include "folly_example.h"
+#include <folly/CancellationToken.h>
+#include <folly/Executor.h>
+#include <folly/ScopeGuard.h>
+#include <folly/Try.h>
+#include <folly/Unit.h>
 #include <folly/executors/CPUThreadPoolExecutor.h>
-#include <folly/executors/ManualExecutor.h>
 #include <folly/experimental/coro/BlockingWait.h>
-#include <folly/experimental/coro/Collect.h>
-#include <folly/experimental/coro/Coroutine.h>
 #include <folly/experimental/coro/Task.h>
-#include <folly/tracing/AsyncStack.h>
+#include <folly/experimental/coro/ViaIfAsync.h>
+#include <folly/experimental/coro/WithAsyncStack.h>
+#include <folly/futures/Future-inl.h>
+#include <folly/futures/Future.h>
+#include <folly/futures/Promise-inl.h>
+#include <folly/tracing/AsyncStack-inl.h>
 #include <cstdlib>
+#include <exception>
+#include <experimental/coroutine>
+#include <functional>
 #include <iostream>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <tuple>
+#include <type_traits>
+#include <utility>
+#include <vector>
+#include "cxx-async-example-folly/src/main.rs.h"
 #include "cxx_async.h"
 #include "cxx_async_folly.h"
 #include "example.h"
-#include "folly/src/main.rs.h"
 #include "rust/cxx.h"
 
 CXXASYNC_DEFINE_FUTURE(RustFutureF64, double);
@@ -31,6 +51,7 @@ const size_t THREAD_COUNT = 8;
 folly::Executor::KeepAlive<folly::CPUThreadPoolExecutor> g_thread_pool(
     new folly::CPUThreadPoolExecutor(THREAD_COUNT));
 
+// Multithreaded dot product computation.
 static folly::coro::Task<double> dot_product_inner(const double a[],
                                                    const double b[],
                                                    size_t count) {
@@ -78,29 +99,27 @@ rust::Box<RustFutureF64> folly_dot_product() {
     co_return co_await dot_product();
 }
 
-void folly_call_rust_dot_product() {
+double folly_call_rust_dot_product() {
     rust::Box<RustFutureF64> future = rust_dot_product();
-    double result = folly::coro::blockingWait(std::move(future));
-    std::cout << result << std::endl;
+    return folly::coro::blockingWait(std::move(future));
 }
 
-void folly_schedule_rust_dot_product() {
+double folly_schedule_rust_dot_product() {
     rust::Box<RustFutureF64> future = rust_dot_product();
-    double result = folly::coro::blockingWait(std::move(future));
-    std::cout << result << std::endl;
+    return folly::coro::blockingWait(std::move(future));
 }
 
 rust::Box<RustFutureF64> folly_not_product() {
     co_return co_await not_product();
 }
 
-void folly_call_rust_not_product() {
+rust::String folly_call_rust_not_product() {
     try {
         rust::Box<RustFutureF64> oneshot_receiver = rust_not_product();
         folly::coro::blockingWait(std::move(oneshot_receiver));
         std::terminate();
     } catch (const std::exception& error) {
-        std::cout << error.what() << std::endl;
+        return rust::String(error.what());
     }
 }
 

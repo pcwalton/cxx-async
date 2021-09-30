@@ -1,5 +1,5 @@
 [package]
-name = "cppcoro"
+name = "cxx-async-example-cppcoro"
 version = "0.1.0"
 authors = ["Patrick Walton <pcwalton@mimiga.net>"]
 edition = "2018"

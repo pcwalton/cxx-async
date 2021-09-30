@@ -1,4 +1,6 @@
 // cxx-async/examples/cppcoro/src/main.rs
+//
+//! Demonstrates how to use `cxx-async` with `cppcoro`.
 
 use async_recursion::async_recursion;
 use cxx_async::CxxAsyncException;
@@ -22,10 +24,10 @@ mod ffi {
         include!("cppcoro_example.h");
 
         fn cppcoro_dot_product() -> Box<RustFutureF64>;
-        fn cppcoro_call_rust_dot_product();
-        fn cppcoro_schedule_rust_dot_product();
+        fn cppcoro_call_rust_dot_product() -> f64;
+        fn cppcoro_schedule_rust_dot_product() -> f64;
         fn cppcoro_not_product() -> Box<RustFutureF64>;
-        fn cppcoro_call_rust_not_product();
+        fn cppcoro_call_rust_not_product() -> String;
         fn cppcoro_ping_pong(i: i32) -> Box<RustFutureString>;
     }
 }
@@ -111,6 +113,54 @@ fn rust_cppcoro_ping_pong(i: i32) -> Box<RustFutureString> {
     })
 }
 
+// Tests Rust calling C++ synchronously.
+#[test]
+fn test_rust_calling_cpp_synchronously() {
+    assert_eq!(executor::block_on(ffi::cppcoro_dot_product()).unwrap(), 75719554055754070000000.0);
+}
+
+// Tests Rust calling C++ on a scheduler.
+#[test]
+fn test_rust_calling_cpp_on_scheduler() {
+    let future = ffi::cppcoro_dot_product();
+    let value = executor::block_on(THREAD_POOL.spawn_with_handle(future).unwrap()).unwrap();
+    assert_eq!(value, 75719554055754070000000.0);
+}
+
+// Tests C++ calling async Rust code synchronously.
+#[test]
+fn test_cpp_calling_rust_synchronously() {
+    assert_eq!(ffi::cppcoro_call_rust_dot_product(), 75719554055754070000000.0);
+}
+
+// Tests C++ calling async Rust code on a scheduler.
+#[test]
+fn test_cpp_calling_rust_on_scheduler() {
+    assert_eq!(ffi::cppcoro_call_rust_dot_product(), 75719554055754070000000.0);
+}
+
+// Tests Rust calling async C++ code throwing exceptions.
+#[test]
+fn test_cpp_async_functions_throwing_exceptions() {
+    match executor::block_on(ffi::cppcoro_not_product()) {
+        Ok(_) => panic!("shouldn't have succeeded"),
+        Err(err) => assert_eq!(err.what(), "kaboom"),
+    }
+}
+
+// Tests C++ calling async Rust code returning errors.
+#[test]
+fn test_rust_async_functions_returning_errors() {
+    assert_eq!(ffi::cppcoro_call_rust_not_product(), "kapow");
+}
+
+// Tests sending values across the language barrier synchronously.
+#[test]
+fn test_ping_pong() {
+    let result = executor::block_on(ffi::cppcoro_ping_pong(0)).unwrap();
+    assert_eq!(result, "ping pong ping pong ping pong ping pong ping pong ");
+}
+
 fn main() {
     // Test Rust calling C++ async functions, both synchronously and via a scheduler.
     let future = ffi::cppcoro_dot_product();
@@ -122,8 +172,8 @@ fn main() {
     );
 
     // Test C++ calling Rust async functions.
-    ffi::cppcoro_call_rust_dot_product();
-    ffi::cppcoro_schedule_rust_dot_product();
+    println!("{}", ffi::cppcoro_call_rust_dot_product());
+    println!("{}", ffi::cppcoro_schedule_rust_dot_product());
 
     // Test exceptions being thrown by C++ async functions.
     let future = ffi::cppcoro_not_product();
@@ -133,7 +183,7 @@ fn main() {
     }
 
     // Test errors being thrown by Rust async functions.
-    ffi::cppcoro_call_rust_not_product();
+    println!("{}", ffi::cppcoro_call_rust_not_product());
 
     // Test yielding across the boundary repeatedly.
     let future = ffi::cppcoro_ping_pong(0);

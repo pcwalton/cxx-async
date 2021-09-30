@@ -2,7 +2,8 @@
 
 #include "cxx_async.h"
 #include <cstdint>
-#include "cxx-async/src/lib.rs.h"
+#include <cstdlib>
+#include "cxx_async_waker.h"
 
 namespace cxx {
 namespace async {

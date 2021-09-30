@@ -1,15 +1,27 @@
 // cxx-async/examples/cppcoro/src/cppcoro_example.cpp
+//
+// An example showing how to interoperate with `cppcoro`.
 
+#include "cppcoro_example.h"
+#include <cppcoro/fmap.hpp>
 #include <cppcoro/schedule_on.hpp>
 #include <cppcoro/static_thread_pool.hpp>
 #include <cppcoro/sync_wait.hpp>
 #include <cppcoro/task.hpp>
 #include <cppcoro/when_all.hpp>
 #include <cstdlib>
-#include <iostream>
-#include "cppcoro/src/main.rs.h"
+#include <exception>
+#include <experimental/coroutine>
+#include <functional>
+#include <iosfwd>
+#include <new>
+#include <stdexcept>
+#include <string>
+#include <tuple>
+#include <type_traits>
+#include <vector>
+#include "cxx-async-example-cppcoro/src/main.rs.h"
 #include "cxx_async.h"
-#include "cxx_async_cppcoro.h"
 #include "example.h"
 #include "rust/cxx.h"
 
@@ -24,6 +36,7 @@ const size_t EXAMPLE_ARRAY_SIZE = 16384;
 // test parallelism, though.
 cppcoro::static_thread_pool g_thread_pool;
 
+// Multithreaded dot product computation.
 static cppcoro::task<double> dot_product_inner(const double a[], const double b[], size_t count) {
     if (count > EXAMPLE_SPLIT_LIMIT) {
         size_t half_count = count / 2;
@@ -54,16 +67,12 @@ rust::Box<RustFutureF64> cppcoro_dot_product() {
     co_return co_await dot_product();
 }
 
-void cppcoro_call_rust_dot_product() {
-    rust::Box<RustFutureF64> future = rust_dot_product();
-    double result = cppcoro::sync_wait(std::move(future));
-    std::cout << result << std::endl;
+double cppcoro_call_rust_dot_product() {
+    return cppcoro::sync_wait(rust_dot_product());
 }
 
-void cppcoro_schedule_rust_dot_product() {
-    rust::Box<RustFutureF64> future = rust_dot_product();
-    double result = cppcoro::sync_wait(cppcoro::schedule_on(g_thread_pool, std::move(future)));
-    std::cout << result << std::endl;
+double cppcoro_schedule_rust_dot_product() {
+    return cppcoro::sync_wait(cppcoro::schedule_on(g_thread_pool, rust_dot_product()));
 }
 
 rust::Box<RustFutureF64> cppcoro_not_product() {
@@ -72,13 +81,13 @@ rust::Box<RustFutureF64> cppcoro_not_product() {
     co_return 1.0;  // Just to make this function a coroutine.
 }
 
-void cppcoro_call_rust_not_product() {
+rust::String cppcoro_call_rust_not_product() {
     try {
         rust::Box<RustFutureF64> oneshot_receiver = rust_not_product();
         cppcoro::sync_wait(std::move(oneshot_receiver));
         std::terminate();
     } catch (const std::exception& error) {
-        std::cout << error.what() << std::endl;
+        return rust::String(error.what());
     }
 }
 

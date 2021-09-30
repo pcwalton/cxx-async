@@ -5,23 +5,24 @@
 
 #include <atomic>
 #include <cstdint>
-#include <cstdlib>
+#include <exception>
 #include <experimental/coroutine>
 #include <functional>
 #include <iostream>
 #include <memory>
 #include <mutex>
-#include <optional>
-#include "cxx_async_waker.h"
+#include <new>
+#include <stdexcept>
+#include <type_traits>
 #include "rust/cxx.h"
 
 #define CXXASYNC_ASSERT(cond) ::cxx::async::cxxasync_assert(cond)
 
-#define CXXASYNC_DEFINE_FUTURE(name, type)                                      \
-    template <>                                                                 \
-    struct cxx::async::RustFutureTraits<name> {                                 \
-        typedef type Result;                                                    \
-    };                                                                                      
+#define CXXASYNC_DEFINE_FUTURE(name, type)      \
+    template <>                                 \
+    struct cxx::async::RustFutureTraits<name> { \
+        typedef type Result;                    \
+    };
 
 namespace cxx {
 namespace async {
@@ -30,23 +31,23 @@ namespace async {
 template <typename Future>
 class RustFutureTraits {};
 
-template<typename Future>
+template <typename Future>
 struct Vtable;
 
-template<typename Future>
+template <typename Future>
 class FutureVtableProvider {
-public:
+   public:
     static const cxx::async::Vtable<Future>* vtable();
 };
 
 // FIXME(pcwalton): Sender and Execlet being incomplete types is awfully weird.
-template<typename Future>
+template <typename Future>
 class RustSender;
-template<typename Future>
+template <typename Future>
 class RustExeclet;
-template<typename Future>
+template <typename Future>
 struct RustExecletBundle;
-template<typename Future>
+template <typename Future>
 struct RustOneshot;
 
 template <typename Future>
@@ -89,7 +90,7 @@ struct Vtable {
     uint32_t (*future_poll)(Future& self, void* result, const void* waker_data);
     RustExecletBundle<Future> (*execlet)();
     void (*execlet_submit)(const RustExeclet<Future>& self, void (*run)(void*), void* task);
-    void (*execlet_send)(const RustExeclet<Future> &self, uint32_t status, const void* value);
+    void (*execlet_send)(const RustExeclet<Future>& self, uint32_t status, const void* value);
 };
 
 template <typename Future>

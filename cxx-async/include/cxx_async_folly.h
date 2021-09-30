@@ -11,8 +11,8 @@
 #include <iostream>
 #include <mutex>
 #include <queue>
+#include "cxx-async-example-folly/src/main.rs.h"
 #include "cxx_async.h"
-#include "folly/src/main.rs.h"
 
 namespace cxx {
 namespace async {

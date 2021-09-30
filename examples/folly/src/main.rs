@@ -21,10 +21,10 @@ mod ffi {
     unsafe extern "C++" {
         include!("folly_example.h");
         fn folly_dot_product() -> Box<RustFutureF64>;
-        fn folly_call_rust_dot_product();
-        fn folly_schedule_rust_dot_product();
+        fn folly_call_rust_dot_product() -> f64;
+        fn folly_schedule_rust_dot_product() -> f64;
         fn folly_not_product() -> Box<RustFutureF64>;
-        fn folly_call_rust_not_product();
+        fn folly_call_rust_not_product() -> String;
         fn folly_ping_pong(i: i32) -> Box<RustFutureString>;
     }
 }
@@ -109,6 +109,55 @@ fn rust_folly_ping_pong(i: i32) -> Box<RustFutureString> {
         )
     })
 }
+
+// Tests Rust calling C++ synchronously.
+#[test]
+fn test_rust_calling_cpp_synchronously() {
+    assert_eq!(executor::block_on(ffi::folly_dot_product()).unwrap(), 75719554055754070000000.0);
+}
+
+// Tests Rust calling C++ on a scheduler.
+#[test]
+fn test_rust_calling_cpp_on_scheduler() {
+    let future = ffi::folly_dot_product();
+    let value = executor::block_on(THREAD_POOL.spawn_with_handle(future).unwrap()).unwrap();
+    assert_eq!(value, 75719554055754070000000.0);
+}
+
+// Tests C++ calling async Rust code synchronously.
+#[test]
+fn test_cpp_calling_rust_synchronously() {
+    assert_eq!(ffi::folly_call_rust_dot_product(), 75719554055754070000000.0);
+}
+
+// Tests C++ calling async Rust code on a scheduler.
+#[test]
+fn test_cpp_calling_rust_on_scheduler() {
+    assert_eq!(ffi::folly_schedule_rust_dot_product(), 75719554055754070000000.0);
+}
+
+// Tests Rust calling async C++ code throwing exceptions.
+#[test]
+fn test_cpp_async_functions_throwing_exceptions() {
+    match executor::block_on(ffi::folly_not_product()) {
+        Ok(_) => panic!("shouldn't have succeeded"),
+        Err(err) => assert_eq!(err.what(), "kaboom"),
+    }
+}
+
+// Tests C++ calling async Rust code returning errors.
+#[test]
+fn test_rust_async_functions_returning_errors() {
+    assert_eq!(ffi::folly_call_rust_not_product(), "kapow");
+}
+
+// Tests sending values across the language barrier synchronously.
+#[test]
+fn test_ping_pong() {
+    let result = executor::block_on(ffi::folly_ping_pong(0)).unwrap();
+    assert_eq!(result, "ping pong ping pong ping pong ping pong ping pong ");
+}
+
 
 fn main() {
     // Test Rust calling C++ async functions, both synchronously and via a scheduler.
