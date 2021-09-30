@@ -11,11 +11,11 @@ and Rust futures and await one from the other.
 It's important to emphasize what `cxx-async` isn't: it isn't a C++ binding to Tokio or any other
 Rust I/O library. Nor is it a Rust binding to `boost::asio` or similar. Such bindings could in
 principle be layered on top of `cxx-async` if desired, but this crate doesn't provide them out of
-the box. (Note that this is a tricky problem even in principle, since Rust async I/O code is
-generally tightly coupled to a single library such as Tokio, in much the same way C++ async I/O
-code tends to be tightly coupled to libraries like `boost::asio`.) If you're writing server code,
-you can still use `cxx-async`, but you will need to ensure that both the Rust and C++ sides run
-separate I/O executors.
+the box. (Note that this is a tricky problem even in theory, since Rust async I/O code is generally
+tightly coupled to a single library such as Tokio, in much the same way C++ async I/O code tends to
+be tightly coupled to libraries like `boost::asio`.) If you're writing server code, you can still
+use `cxx-async`, but you will need to ensure that both the Rust and C++ sides run separate I/O
+executors.
 
 `cxx-async` aims for compatibility with popular C++ coroutine support libraries. Right now,
 both the lightweight [`cppcoro`](https://github.com/lewissbaker/cppcoro) and the more comprehensive
@@ -117,13 +117,19 @@ cppcoro::task<rust::String> call_rust() {
 }
 ```
 
-That's it!
+That's it! You should now be able to freely await futures on either side.
+
+## Code of Conduct
+
+`cxx-async` follows the same Code of Conduct as Rust itself. Reports can be made to the crate
+authors.
 
 ## License
 
 Licensed under either of Apache License, Version 2.0 or MIT license at your option.
 
 Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in
-this project by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions. 
+this project by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without
+any additional terms or conditions.
 
 [C++20 coroutines]: https://en.cppreference.com/w/cpp/language/coroutines

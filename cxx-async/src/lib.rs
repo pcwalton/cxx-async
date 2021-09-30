@@ -19,6 +19,104 @@
 //! both the lightweight [`cppcoro`](https://github.com/lewissbaker/cppcoro) and the more
 //! comprehensive [Folly](https://github.com/facebook/folly/) are supported. Patches are welcome to
 //! support others.
+//!
+//! ## Quick tutorial
+//! 
+//! To use `cxx-async`, first start by adding `cxx` to your project. Then add the following to your
+//! `Cargo.toml`:
+//! 
+//! ```toml
+//! [dependencies]
+//! cxx-async = "0.1"
+//! ```
+//! 
+//! Now, inside your `#[cxx::bridge]` module, declare a future type and some methods like so:
+//! 
+//! ```ignore
+//! #[cxx::bridge]
+//! mod ffi {
+//!     // Give each future type that you want to bridge a name.
+//!     extern "Rust" {
+//!         type RustFutureString;
+//!     }
+//! 
+//!     // Async C++ methods that you wish Rust to call go here. Make sure they return one of the
+//!     // boxed future types you declared above.
+//!     unsafe extern "C++" {
+//!         fn hello_from_cpp() -> Box<RustFutureString>;
+//!     }
+//! 
+//!     // Async Rust methods that you wish C++ to call go here. Again, make sure they return one of
+//!     // the boxed future types you declared above.
+//!     extern "Rust" {
+//!         fn hello_from_rust() -> Box<RustFutureString>;
+//!     }
+//! }
+//! ```
+//! 
+//! After the `#[cxx::bridge]` block, define the future types using the
+//! `#[cxx_async::bridge_future]` attribute:
+//! 
+//! ```
+//! // The inner type is the Rust type that this future yields.
+//! #[cxx_async::bridge_future]
+//! struct RustFutureString(String);
+//! ```
+//! 
+//! Now, in your C++ file, make sure to `#include` the right headers:
+//! 
+//! ```cpp
+//! #include "rust/cxx.h"
+//! #include "rust/cxx_async.h"
+//! #include "rust/cxx_async_cppcoro.h"  // Or cxx_async_folly.h, as appropriate.
+//! ```
+//! 
+//! And add a call to the `CXXASYNC_DEFINE_FUTURE` macro to define the C++ side of the future:
+//! 
+//! ```cpp
+//! // The first argument is the name you gave the future, and the second argument is the
+//! // corresponding C++ type. The latter is the C++ type that `cxx` maps your Rust type to: in this
+//! // case, `String` maps to `rust::String`, so we supply `rust::String` here.
+//! CXXASYNC_DEFINE_FUTURE(RustFutureString, rust::String);
+//! ```
+//! 
+//! You're all set! Now you can define asynchronous C++ code that Rust can call:
+//! 
+//! ```cpp
+//! rust::Box<RustFutureString> hello_from_cpp() {
+//!     co_return std::string("Hello world!");
+//! }
+//! ```
+//! 
+//! On the Rust side:
+//! 
+//! ```ignore
+//! async fn call_cpp() -> String {
+//!     // This returns a Result (with the error variant populated if C++ threw an exception), so
+//!     // you need to unwrap it:
+//!     ffi::hello_from_cpp().await.unwrap()
+//! }
+//! ```
+//! 
+//! And likewise, define some asynchronous Rust code that C++ can call:
+//! 
+//! ```ignore
+//! use cxx_async::CxxAsyncResult;
+//! fn hello_from_rust() -> Box<RustFutureString> {
+//!     // You can instead use `fallible` if your async block returns a Result.
+//!     RustFutureString::infallible(async { "Hello world!".to_owned() })
+//! }
+//! ```
+//! 
+//! Over on the C++ side:
+//! 
+//! ```cpp
+//! cppcoro::task<rust::String> call_rust() {
+//!     co_return hello_from_rust();
+//! }
+//! ```
+//! 
+//! That's it! You should now be able to freely await futures on either side.
 
 #![warn(missing_docs)]
 
