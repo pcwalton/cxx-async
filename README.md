@@ -17,9 +17,10 @@ be tightly coupled to libraries like `boost::asio`.) If you're writing server co
 use `cxx-async`, but you will need to ensure that both the Rust and C++ sides run separate I/O
 executors.
 
-`cxx-async` aims for compatibility with popular C++ coroutine support libraries. Right now,
-both the lightweight [`cppcoro`](https://github.com/lewissbaker/cppcoro) and the more comprehensive
-[Folly](https://github.com/facebook/folly/) are supported. Patches are welcome to support others.
+`cxx-async` aims for compatibility with popular C++ coroutine support libraries. Right now, both
+the lightweight [`cppcoro`](https://github.com/lewissbaker/cppcoro) and the more comprehensive
+[Folly](https://github.com/facebook/folly/) are supported. Pull requests are welcome to support
+others.
 
 ## Quick tutorial
 

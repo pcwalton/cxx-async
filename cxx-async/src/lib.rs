@@ -1,24 +1,24 @@
 // cxx-async/src/main.rs
 //
-//! `cxx-async` is a Rust crate that extends the cxx library to provide seamless interoperability
-//! between asynchronous Rust code using `async`/`await` and C++20 coroutines using `co_await`. If
-//! your C++ code is asynchronous, `cxx-async` can provide a more convenient, and potentially more
-//! efficient, alternative to callbacks. You can freely convert between C++ coroutines and Rust
-//! futures and await one from the other.
+//! `cxx-async` is a Rust crate that extends the [`cxx`](http://cxx.rs/) library to provide
+//! seamless interoperability between asynchronous Rust code using `async`/`await` and [C++20
+//! coroutines] using `co_await`. If your C++ code is asynchronous, `cxx-async` can provide a more
+//! convenient, and potentially more efficient, alternative to callbacks. You can freely convert
+//! between C++ coroutines and Rust futures and await one from the other.
 //!
 //! It's important to emphasize what `cxx-async` isn't: it isn't a C++ binding to Tokio or any
 //! other Rust I/O library. Nor is it a Rust binding to `boost::asio` or similar. Such bindings
 //! could in principle be layered on top of `cxx-async` if desired, but this crate doesn't provide
-//! them out of the box. (Note that this is a tricky problem even in principle, since Rust async
-//! I/O code is generally tightly coupled to a single library such as Tokio, in much the same way
-//! C++ async I/O code tends to be tightly coupled to libraries like `boost::asio`.) If you're
-//! writing server code, you can still use `cxx-async`, but you will need to ensure that both the
-//! Rust and C++ sides run separate I/O executors.
+//! them out of the box. (Note that this is a tricky problem even in theory, since Rust async I/O
+//! code is generally tightly coupled to a single library such as Tokio, in much the same way C++
+//! async I/O code tends to be tightly coupled to libraries like `boost::asio`.) If you're writing
+//! server code, you can still use `cxx-async`, but you will need to ensure that both the Rust and
+//! C++ sides run separate I/O executors.
 //!
 //! `cxx-async` aims for compatibility with popular C++ coroutine support libraries. Right now,
 //! both the lightweight [`cppcoro`](https://github.com/lewissbaker/cppcoro) and the more
-//! comprehensive [Folly](https://github.com/facebook/folly/) are supported. Patches are welcome to
-//! support others.
+//! comprehensive [Folly](https://github.com/facebook/folly/) are supported. Pull requests are
+//! welcome to support others.
 //!
 //! ## Quick tutorial
 //! 
@@ -117,6 +117,8 @@
 //! ```
 //! 
 //! That's it! You should now be able to freely await futures on either side.
+//!
+//! [C++20 coroutines]: https://en.cppreference.com/w/cpp/language/coroutines
 
 #![warn(missing_docs)]
 

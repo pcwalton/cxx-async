@@ -10,6 +10,20 @@ use std::collections::HashMap;
 use std::fmt::Write;
 use syn::{Fields, Ident, ItemStruct};
 
+/// Defines a future type that can be awaited from both Rust and C++.
+///
+/// The syntax to use is:
+///
+/// ```ignore
+/// #[cxx_async::bridge_future]
+/// struct RustFutureString(String);
+/// ```
+///
+/// Here, `RustFutureString` is the name of the future type declared inside the
+/// `extern Rust { ... }` block inside the `#[cxx::bridge]` module. `String` is the Rust type that
+/// the future yields when awaited; on the Rust side it will be automatically wrapped in a
+/// `CxxAsyncResult`. On the C++ side it will be converted to the appropriate type, following the
+/// `cxx` rules. Err returns are translated into C++ exceptions.
 #[proc_macro_attribute]
 pub fn bridge_future(_: TokenStream, item: TokenStream) -> TokenStream {
     let struct_item: ItemStruct = match syn::parse(item) {
@@ -72,10 +86,12 @@ pub fn bridge_future(_: TokenStream, item: TokenStream) -> TokenStream {
             Option<::futures::channel::oneshot::Sender<::cxx_async::CxxAsyncResult<#output>>>);
 
         // A type alias for the receiving end (i.e. the concrete future type).
+        #[doc(hidden)]
         type #receiver = ::cxx_async::CxxAsyncReceiver<#output>;
 
         // The wrapped execlet for this future.
         #[repr(transparent)]
+        #[doc(hidden)]
         pub struct #execlet(::cxx_async::Execlet<#output>);
 
         impl #future {
@@ -175,6 +191,7 @@ pub fn bridge_future(_: TokenStream, item: TokenStream) -> TokenStream {
         // SAFETY: This is a raw FFI function called by `cxx`. `cxx` ensures that `ptr` is a
         // valid Box.
         #[no_mangle]
+        #[doc(hidden)]
         pub unsafe extern "C" fn #drop_sender_glue(ptr: *mut Box<#sender>) {
             let mut boxed: ::std::mem::MaybeUninit<Box<#sender>> =
                 ::std::mem::MaybeUninit::uninit();
