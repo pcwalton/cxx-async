@@ -1,7 +1,7 @@
-// cxx-async/include/cxx_async.h
+// cxx-async/include/rust/cxx_async.h
 
-#ifndef CXX_ASYNC_CXX_ASYNC_H
-#define CXX_ASYNC_CXX_ASYNC_H
+#ifndef RUST_CXX_ASYNC_H
+#define RUST_CXX_ASYNC_H
 
 #include <atomic>
 #include <cstdint>
@@ -16,15 +16,15 @@
 #include <type_traits>
 #include "rust/cxx.h"
 
-#define CXXASYNC_ASSERT(cond) ::cxx::async::cxxasync_assert(cond)
+#define CXXASYNC_ASSERT(cond) ::rust::async::cxxasync_assert(cond)
 
-#define CXXASYNC_DEFINE_FUTURE(name, type)      \
-    template <>                                 \
-    struct cxx::async::RustFutureTraits<name> { \
-        typedef type Result;                    \
+#define CXXASYNC_DEFINE_FUTURE(name, type)       \
+    template <>                                  \
+    struct rust::async::RustFutureTraits<name> { \
+        typedef type Result;                     \
     };
 
-namespace cxx {
+namespace rust {
 namespace async {
 
 // Must match the definition in `cxx_async/src/lib.rs`.
@@ -37,7 +37,7 @@ struct Vtable;
 template <typename Future>
 class FutureVtableProvider {
    public:
-    static const cxx::async::Vtable<Future>* vtable();
+    static const rust::async::Vtable<Future>* vtable();
 };
 
 // FIXME(pcwalton): Sender and Execlet being incomplete types is awfully weird.
@@ -341,17 +341,17 @@ inline bool RustAwaiter<Future>::await_suspend(std::experimental::coroutine_hand
 }
 
 }  // namespace async
-}  // namespace cxx
+}  // namespace rust
 
 // FIXME(pcwalton): Why does this have to be outside the namespace?
 template <typename Future>
-inline cxx::async::RustAwaiter<Future> operator co_await(rust::Box<Future>&& future) noexcept {
-    return cxx::async::RustAwaiter(std::move(future));
+inline rust::async::RustAwaiter<Future> operator co_await(rust::Box<Future>&& future) noexcept {
+    return rust::async::RustAwaiter(std::move(future));
 }
 
 template <typename Future, typename... Args>
 struct std::experimental::coroutine_traits<rust::Box<Future>, Args...> {
-    using promise_type = cxx::async::RustPromise<Future>;
+    using promise_type = rust::async::RustPromise<Future>;
 };
 
-#endif  // CXX_ASYNC_CXX_ASYNC_H
+#endif  // RUST_CXX_ASYNC_H

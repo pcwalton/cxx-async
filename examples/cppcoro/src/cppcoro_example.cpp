@@ -21,9 +21,10 @@
 #include <type_traits>
 #include <vector>
 #include "cxx-async-example-cppcoro/src/main.rs.h"
-#include "cxx_async.h"
 #include "example.h"
 #include "rust/cxx.h"
+#include "rust/cxx_async.h"
+#include "rust/cxx_async_cppcoro.h"
 
 CXXASYNC_DEFINE_FUTURE(RustFutureF64, double);
 CXXASYNC_DEFINE_FUTURE(RustFutureString, rust::String);

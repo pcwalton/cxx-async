@@ -32,10 +32,10 @@
 #include <utility>
 #include <vector>
 #include "cxx-async-example-folly/src/main.rs.h"
-#include "cxx_async.h"
-#include "cxx_async_folly.h"
 #include "example.h"
 #include "rust/cxx.h"
+#include "rust/cxx_async.h"
+#include "rust/cxx_async_folly.h"
 
 CXXASYNC_DEFINE_FUTURE(RustFutureF64, double);
 CXXASYNC_DEFINE_FUTURE(RustFutureString, rust::String);

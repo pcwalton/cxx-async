@@ -60,7 +60,6 @@ fn main() {
     }
 
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-changed=../include/cxx_async_folly.h");
     println!("cargo:rerun-if-changed=include/folly_example.h");
     println!("cargo:rerun-if-changed=src/folly_example.cpp");
 

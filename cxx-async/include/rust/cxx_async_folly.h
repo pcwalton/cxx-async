@@ -1,7 +1,7 @@
-// cxx-async/include/cxx_async_folly.h
+// cxx-async/include/rust/cxx_async_folly.h
 
-#ifndef CXX_ASYNC_CXX_ASYNC_FOLLY_H
-#define CXX_ASYNC_CXX_ASYNC_FOLLY_H
+#ifndef RUST_CXX_ASYNC_FOLLY_H
+#define RUST_CXX_ASYNC_FOLLY_H
 
 #include <folly/Executor.h>
 #include <folly/Try.h>
@@ -11,10 +11,9 @@
 #include <iostream>
 #include <mutex>
 #include <queue>
-#include "cxx-async-example-folly/src/main.rs.h"
-#include "cxx_async.h"
+#include "rust/cxx_async.h"
 
-namespace cxx {
+namespace rust {
 namespace async {
 
 extern "C" inline void execlet_run_task(void* task_ptr);
@@ -58,7 +57,7 @@ class Execlet : public folly::Executor {
 //
 // Usually you don't need to call this manually, because you can just `co_await` a Folly Task
 // inside a coroutine that returns a Rust Future (thanks to the magic of await transformers). For
-// example, instead of writing `cxx::async::folly_task_to_rust_future(foo())` you can just write
+// example, instead of writing `rust::async::folly_task_to_rust_future(foo())` you can just write
 // `co_return co_await foo();`.
 template <typename Future>
 rust::Box<Future> folly_task_to_rust_future(folly::coro::Task<RustResultFor<Future>>&& task) {
@@ -95,6 +94,6 @@ class AwaitTransformer<folly::coro::Task<Result>, Future> {
 };
 
 }  // namespace async
-}  // namespace cxx
+}  // namespace rust
 
-#endif  // CXX_ASYNC_CXX_ASYNC_FOLLY_H
+#endif  // RUST_CXX_ASYNC_FOLLY_H

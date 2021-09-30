@@ -6,6 +6,7 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
+use std::collections::HashMap;
 use std::fmt::Write;
 use syn::{Fields, Ident, ItemStruct};
 
@@ -43,7 +44,7 @@ pub fn bridge_future(_: TokenStream, item: TokenStream) -> TokenStream {
     let vtable_glue = Ident::new(
         &mangle_cxx_name(&[
             CxxNameToken::StartQName,
-            CxxNameToken::Name("cxx"),
+            CxxNameToken::Name("rust"),
             CxxNameToken::Name("async"),
             CxxNameToken::Name("FutureVtableProvider"),
             CxxNameToken::StartTemplate,
@@ -219,7 +220,7 @@ fn mangle_drop_glue(name: &str, future: &str) -> String {
         CxxNameToken::Name("Box"),
         CxxNameToken::StartTemplate,
         CxxNameToken::StartQName,
-        CxxNameToken::Name("cxx"),
+        CxxNameToken::Name("rust"),
         CxxNameToken::Name("async"),
         CxxNameToken::Name(name),
         CxxNameToken::StartTemplate,
@@ -244,12 +245,27 @@ enum CxxNameToken<'a> {
 
 // Mangles a C++ name.
 //
+// This isn't a general C++ name mangling routine; it's just enough for what we need to
+// emit.
+//
 // TODO(pcwalton): MSVC mangling.
 fn mangle_cxx_name(tokens: &[CxxNameToken]) -> String {
     let mut string = "_Z".to_owned();
+    let (mut substitutions, mut substitution_count) = (HashMap::new(), 0u32);
+
     for token in tokens {
         match *token {
-            CxxNameToken::Name(name) => write!(&mut string, "{}{}", name.len(), name).unwrap(),
+            CxxNameToken::Name(name) => {
+                match substitutions.get(name) {
+                    None => {
+                        substitutions.insert(name, substitution_count);
+                        substitution_count += 1;
+                        write!(&mut string, "{}{}", name.len(), name).unwrap();
+                    }
+                    Some(&0) => write!(&mut string, "S_").unwrap(),
+                    Some(_) => unimplemented!(),
+                }
+            }
             CxxNameToken::StartQName => string.push_str("N"),
             CxxNameToken::EndQName => string.push_str("E"),
             CxxNameToken::StartTemplate => string.push_str("I"),
