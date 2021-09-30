@@ -57,7 +57,6 @@ static folly::coro::Task<double> dot_product_inner(const double a[],
                                                    size_t count) {
     if (count > EXAMPLE_SPLIT_LIMIT) {
         size_t half_count = count / 2;
-        // FIXME(pcwalton): Don't run the second one on the thread pool.
         folly::Future<double> taskA = dot_product_inner(a, b, half_count).semi().via(g_thread_pool);
         folly::Future<double> taskB =
             dot_product_inner(a + half_count, b + half_count, count - half_count)

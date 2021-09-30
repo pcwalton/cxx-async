@@ -341,13 +341,15 @@ inline bool RustAwaiter<Future>::await_suspend(std::experimental::coroutine_hand
 }
 
 }  // namespace async
-}  // namespace rust
 
-// FIXME(pcwalton): Why does this have to be outside the namespace?
+// This can't be in the `rust::async` namespace because it relies on ADL on `rust::Box<Future>` to
+// be found.
 template <typename Future>
-inline rust::async::RustAwaiter<Future> operator co_await(rust::Box<Future>&& future) noexcept {
-    return rust::async::RustAwaiter(std::move(future));
+inline async::RustAwaiter<Future> operator co_await(Box<Future>&& future) noexcept {
+    return async::RustAwaiter(std::move(future));
 }
+
+}  // namespace rust
 
 template <typename Future, typename... Args>
 struct std::experimental::coroutine_traits<rust::Box<Future>, Args...> {
