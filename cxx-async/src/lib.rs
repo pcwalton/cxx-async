@@ -21,17 +21,17 @@
 //! welcome to support others.
 //!
 //! ## Quick tutorial
-//! 
+//!
 //! To use `cxx-async`, first start by adding `cxx` to your project. Then add the following to your
 //! `Cargo.toml`:
-//! 
+//!
 //! ```toml
 //! [dependencies]
 //! cxx-async = "0.1"
 //! ```
-//! 
+//!
 //! Now, inside your `#[cxx::bridge]` module, declare a future type and some methods like so:
-//! 
+//!
 //! ```ignore
 //! #[cxx::bridge]
 //! mod ffi {
@@ -39,13 +39,13 @@
 //!     extern "Rust" {
 //!         type RustFutureString;
 //!     }
-//! 
+//!
 //!     // Async C++ methods that you wish Rust to call go here. Make sure they return one of the
 //!     // boxed future types you declared above.
 //!     unsafe extern "C++" {
 //!         fn hello_from_cpp() -> Box<RustFutureString>;
 //!     }
-//! 
+//!
 //!     // Async Rust methods that you wish C++ to call go here. Again, make sure they return one of
 //!     // the boxed future types you declared above.
 //!     extern "Rust" {
@@ -53,43 +53,43 @@
 //!     }
 //! }
 //! ```
-//! 
+//!
 //! After the `#[cxx::bridge]` block, define the future types using the
 //! `#[cxx_async::bridge_future]` attribute:
-//! 
+//!
 //! ```
 //! // The inner type is the Rust type that this future yields.
 //! #[cxx_async::bridge_future]
 //! struct RustFutureString(String);
 //! ```
-//! 
+//!
 //! Now, in your C++ file, make sure to `#include` the right headers:
-//! 
+//!
 //! ```cpp
 //! #include "rust/cxx.h"
 //! #include "rust/cxx_async.h"
 //! #include "rust/cxx_async_cppcoro.h"  // Or cxx_async_folly.h, as appropriate.
 //! ```
-//! 
+//!
 //! And add a call to the `CXXASYNC_DEFINE_FUTURE` macro to define the C++ side of the future:
-//! 
+//!
 //! ```cpp
 //! // The first argument is the name you gave the future, and the second argument is the
 //! // corresponding C++ type. The latter is the C++ type that `cxx` maps your Rust type to: in this
 //! // case, `String` maps to `rust::String`, so we supply `rust::String` here.
 //! CXXASYNC_DEFINE_FUTURE(RustFutureString, rust::String);
 //! ```
-//! 
+//!
 //! You're all set! Now you can define asynchronous C++ code that Rust can call:
-//! 
+//!
 //! ```cpp
 //! rust::Box<RustFutureString> hello_from_cpp() {
 //!     co_return std::string("Hello world!");
 //! }
 //! ```
-//! 
+//!
 //! On the Rust side:
-//! 
+//!
 //! ```ignore
 //! async fn call_cpp() -> String {
 //!     // This returns a Result (with the error variant populated if C++ threw an exception), so
@@ -97,9 +97,9 @@
 //!     ffi::hello_from_cpp().await.unwrap()
 //! }
 //! ```
-//! 
+//!
 //! And likewise, define some asynchronous Rust code that C++ can call:
-//! 
+//!
 //! ```ignore
 //! use cxx_async::CxxAsyncResult;
 //! fn hello_from_rust() -> Box<RustFutureString> {
@@ -107,15 +107,15 @@
 //!     RustFutureString::infallible(async { "Hello world!".to_owned() })
 //! }
 //! ```
-//! 
+//!
 //! Over on the C++ side:
-//! 
+//!
 //! ```cpp
 //! cppcoro::task<rust::String> call_rust() {
 //!     co_return hello_from_rust();
 //! }
 //! ```
-//! 
+//!
 //! That's it! You should now be able to freely await futures on either side.
 //!
 //! [C++20 coroutines]: https://en.cppreference.com/w/cpp/language/coroutines
@@ -220,11 +220,14 @@ unsafe impl Sync for CxxAsyncVtable {}
 // definition in `cxx_async.h`.
 #[repr(C)]
 #[doc(hidden)]
-pub struct CxxAsyncOneshot<Future, Sender> {
+pub struct CxxAsyncOneshot<Fut, Out>
+where
+    Fut: Future<Output = CxxAsyncResult<Out>>,
+{
     // The receiving end.
-    future: Box<Future>,
+    future: Box<Fut>,
     // The sending end.
-    sender: Box<Sender>,
+    sender: Box<CxxAsyncSender<Out>>,
 }
 
 // The concrete type of the future that wraps a C++ coroutine.
@@ -234,6 +237,12 @@ pub struct CxxAsyncOneshot<Future, Sender> {
 // `define_cxx_future!` macro needs to name it.
 #[doc(hidden)]
 pub struct CxxAsyncReceiver<Output>(OneshotReceiver<CxxAsyncResult<Output>>);
+
+// The concrete type of the sending end of a future.
+//
+// This must be public because the `define_cxx_future!` macro needs to name it.
+#[doc(hidden)]
+pub struct CxxAsyncSender<Output>(Option<OneshotSender<CxxAsyncResult<Output>>>);
 
 impl<Output> Future for CxxAsyncReceiver<Output> {
     type Output = CxxAsyncResult<Output>;
@@ -261,17 +270,6 @@ impl<Output> From<OneshotReceiver<CxxAsyncResult<Output>>> for CxxAsyncReceiver<
 pub trait RustSender {
     type Output;
     fn send(&mut self, value: CxxAsyncResult<Self::Output>);
-}
-
-// A trait very similar to `Future`, but with two differences:
-// 1. It doesn't require `self` to be pinned, because C++ has no notion of this.
-// 2. The return value is wrapped in `CxxAsyncResult`.
-//
-// This is an implementation detail used when C++ waits for a Rust future.
-#[doc(hidden)]
-pub trait CxxAsyncFuture {
-    type Output;
-    fn poll(&mut self, context: &mut Context) -> Poll<CxxAsyncResult<Self::Output>>;
 }
 
 // An execlet and a future that extracts the return value from it.
@@ -453,17 +451,14 @@ pub trait IntoCxxAsyncFuture {
 //
 // This needs an out pointer because of https://github.com/rust-lang/rust-bindgen/issues/778
 #[doc(hidden)]
-pub unsafe extern "C" fn channel<Future, Sender, Receiver, Output>(
-    out_oneshot: *mut CxxAsyncOneshot<Future, Sender>,
-) where
-    Future: From<Receiver>,
-    Receiver: From<OneshotReceiver<CxxAsyncResult<Output>>>,
-    Sender: From<OneshotSender<CxxAsyncResult<Output>>>,
+pub unsafe extern "C" fn channel<Fut, Out>(out_oneshot: *mut CxxAsyncOneshot<Fut, Out>)
+where
+    Fut: From<CxxAsyncReceiver<Out>> + Future<Output = CxxAsyncResult<Out>>,
 {
     let (sender, receiver) = oneshot::channel();
     let oneshot = CxxAsyncOneshot {
-        sender: Box::new(sender.into()),
-        future: Box::new(Receiver::from(receiver).into()),
+        sender: Box::new(CxxAsyncSender(Some(sender))),
+        future: Box::new(CxxAsyncReceiver(receiver).into()),
     };
     ptr::copy_nonoverlapping(&oneshot, out_oneshot, 1);
     mem::forget(oneshot);
@@ -492,27 +487,35 @@ unsafe fn unpack_value_to_send<Output>(status: u32, value: *const u8) -> CxxAsyn
 //
 // Takes ownership of the value. The caller must not call its destructor.
 #[doc(hidden)]
-pub unsafe extern "C" fn sender_send<Sender, Output>(
-    this: &mut Sender,
+pub unsafe extern "C" fn sender_send<Output>(
+    this: &mut CxxAsyncSender<Output>,
     status: u32,
     value: *const u8,
-) where
-    Sender: RustSender<Output = Output>,
-{
-    this.send(unpack_value_to_send(status, value))
+) {
+    match this
+        .0
+        .take()
+        .unwrap()
+        .send(unpack_value_to_send(status, value))
+    {
+        Ok(_) => {}
+        Err(_) => panic!("Failed to send!"),
+    }
 }
 
 // C++ calls this to poll a wrapped Rust future.
 //
-// SAFETY: This is a low-level function called by our C++ code.
+// SAFETY:
+// * This is a low-level function called by our C++ code.
+// * `Pin<&mut Future>` is marked `#[repr(transparent)]`, so it's FFI-safe.
 #[doc(hidden)]
-pub unsafe extern "C" fn future_poll<Output, Future>(
-    this: &mut Future,
+pub unsafe extern "C" fn future_poll<Fut, Out>(
+    this: Pin<&mut Fut>,
     result: *mut u8,
     waker_data: *const u8,
 ) -> u32
 where
-    Future: CxxAsyncFuture<Output = Output>,
+    Fut: Future<Output = CxxAsyncResult<Out>>,
 {
     let waker = Waker::from_raw(RawWaker::new(
         waker_data as *const (),
@@ -521,7 +524,7 @@ where
     let mut context = Context::from_waker(&waker);
     match this.poll(&mut context) {
         Poll::Ready(Ok(value)) => {
-            ptr::copy_nonoverlapping(&value, result as *mut Output, 1);
+            ptr::copy_nonoverlapping(&value, result as *mut Out, 1);
             mem::forget(value);
             FUTURE_STATUS_COMPLETE
         }
@@ -541,17 +544,16 @@ where
 //
 // This needs an out pointer because of https://github.com/rust-lang/rust-bindgen/issues/778
 #[doc(hidden)]
-pub unsafe extern "C" fn execlet_bundle<Future, Exec, Output>(
-    out_bundle: *mut CxxAsyncExecletBundle<Future, Exec>,
+pub unsafe extern "C" fn execlet_bundle<Future, Output>(
+    out_bundle: *mut CxxAsyncExecletBundle<Future, Execlet<Output>>,
 ) where
     Future: IntoCxxAsyncFuture<Output = Output>,
-    Exec: From<Execlet<Output>>,
     Output: Clone + Send + 'static,
 {
     let (future, execlet) = Execlet::<Output>::bundle();
     let bundle = CxxAsyncExecletBundle {
         future: Future::fallible(future),
-        execlet: Box::new(execlet.into()),
+        execlet: Box::new(execlet),
     };
     ptr::copy_nonoverlapping(&bundle, out_bundle, 1);
     mem::forget(bundle);
@@ -598,6 +600,16 @@ where
             .expect("Send with no waker present?")
             .wake_by_ref();
     }
+}
+
+// The C++ bridge indirectly calls this to drop types.
+//
+// SAFETY: This is a low-level function called (indirectly) by `cxx`'s C++ code.
+#[doc(hidden)]
+pub unsafe extern "C" fn drop_glue<T>(ptr: *mut Box<T>) {
+    let mut boxed: MaybeUninit<Box<T>> = MaybeUninit::uninit();
+    ptr::copy_nonoverlapping(ptr, boxed.as_mut_ptr(), 1);
+    drop(boxed.assume_init());
 }
 
 // Bumps the reference count on a suspended C++ coroutine.

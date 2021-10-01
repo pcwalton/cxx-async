@@ -43,10 +43,6 @@ pub fn bridge_future(_: TokenStream, item: TokenStream) -> TokenStream {
     let future = struct_item.ident;
     let future_name_string = format!("{}", future);
 
-    let sender = Ident::new(&format!("{}Sender", future), future.span());
-    let receiver = Ident::new(&format!("{}Receiver", future), future.span());
-    let execlet = Ident::new(&format!("{}Execlet", future), future.span());
-
     let drop_sender_glue = Ident::new(
         &mangle_drop_glue("RustSender", &future_name_string),
         future.span(),
@@ -79,21 +75,6 @@ pub fn bridge_future(_: TokenStream, item: TokenStream) -> TokenStream {
             future: ::futures::future::BoxFuture<'static, ::cxx_async::CxxAsyncResult<#output>>,
         }
 
-        // The wrapper for the sending end.
-        #[repr(transparent)]
-        #[doc(hidden)]
-        pub struct #sender(
-            Option<::futures::channel::oneshot::Sender<::cxx_async::CxxAsyncResult<#output>>>);
-
-        // A type alias for the receiving end (i.e. the concrete future type).
-        #[doc(hidden)]
-        type #receiver = ::cxx_async::CxxAsyncReceiver<#output>;
-
-        // The wrapped execlet for this future.
-        #[repr(transparent)]
-        #[doc(hidden)]
-        pub struct #execlet(::cxx_async::Execlet<#output>);
-
         impl #future {
             // SAFETY: See: https://docs.rs/pin-utils/0.1.0/pin_utils/macro.unsafe_pinned.html
             // 1. The struct does not implement Drop (other than for debugging, which doesn't
@@ -124,48 +105,12 @@ pub fn bridge_future(_: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
 
-        // Implement the CxxAsyncFuture trait that doesn't require pinning.
-        impl ::cxx_async::CxxAsyncFuture for #future {
-            type Output = #output;
-            fn poll(&mut self, context: &mut ::std::task::Context)
-                    -> ::std::task::Poll<::cxx_async::CxxAsyncResult<Self::Output>> {
-                ::std::future::Future::poll(::std::pin::Pin::new(&mut self.future), context)
-            }
-        }
-
-        // Implement sending for the Sender trait.
-        //
-        // FIXME(pcwalton): Not sure if we need this?
-        impl ::cxx_async::RustSender for #sender {
-            type Output = #output;
-            fn send(&mut self, value: ::cxx_async::CxxAsyncResult<#output>) {
-                self.0.take().unwrap().send(value).unwrap()
-            }
-        }
-
         // Define how to wrap concrete receivers in the `RustFuture` type.
-        impl ::std::convert::From<#receiver> for #future {
-            fn from(receiver: #receiver) -> Self {
+        impl ::std::convert::From<::cxx_async::CxxAsyncReceiver<#output>> for #future {
+            fn from(receiver: ::cxx_async::CxxAsyncReceiver<#output>) -> Self {
                 Self {
                     future: Box::pin(receiver),
                 }
-            }
-        }
-
-        // Define how to wrap raw oneshot senders in the `RustSender` type.
-        impl ::std::convert::From<::futures::channel::oneshot::Sender<
-                ::cxx_async::CxxAsyncResult<#output>>> for #sender {
-            fn from(sender:
-                    ::futures::channel::oneshot::Sender<::cxx_async::CxxAsyncResult<#output>>) ->
-                    Self {
-                Self(Some(sender))
-            }
-        }
-
-        // Define how to wrap raw Execlets in the `RustExeclet` type we just defined.
-        impl ::std::convert::From<::cxx_async::Execlet<#output>> for #execlet {
-            fn from(execlet: ::cxx_async::Execlet<#output>) -> Self {
-                Self(execlet)
             }
         }
 
@@ -183,7 +128,7 @@ pub fn bridge_future(_: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
 
-        // The C++ bridge calls this to destroy a `RustSender`.
+        // The C++ bridge calls this to destroy a sender.
         //
         // I'm not sure if this can ever legitimately happen, but C++ wants to link to this
         // function anyway, so let's provide it.
@@ -192,11 +137,9 @@ pub fn bridge_future(_: TokenStream, item: TokenStream) -> TokenStream {
         // valid Box.
         #[no_mangle]
         #[doc(hidden)]
-        pub unsafe extern "C" fn #drop_sender_glue(ptr: *mut Box<#sender>) {
-            let mut boxed: ::std::mem::MaybeUninit<Box<#sender>> =
-                ::std::mem::MaybeUninit::uninit();
-            ::std::ptr::copy_nonoverlapping(ptr, boxed.as_mut_ptr(), 1);
-            drop(boxed.assume_init());
+        pub unsafe extern "C" fn #drop_sender_glue(ptr: *mut
+                Box<::cxx_async::CxxAsyncSender<#output>>) {
+            ::cxx_async::drop_glue(ptr)
         }
 
         // The C++ bridge calls this to destroy an `Execlet`.
@@ -205,21 +148,18 @@ pub fn bridge_future(_: TokenStream, item: TokenStream) -> TokenStream {
         // valid Box.
         #[no_mangle]
         #[doc(hidden)]
-        pub unsafe extern "C" fn #drop_execlet_glue(ptr: *mut Box<#execlet>) {
-            let mut boxed: ::std::mem::MaybeUninit<Box<#execlet>> =
-                ::std::mem::MaybeUninit::uninit();
-            ::std::ptr::copy_nonoverlapping(ptr, boxed.as_mut_ptr(), 1);
-            drop(boxed.assume_init());
+        pub unsafe extern "C" fn #drop_execlet_glue(ptr: *mut Box<::cxx_async::Execlet<#output>>) {
+            ::cxx_async::drop_glue(ptr)
         }
 
         #[no_mangle]
         #[doc(hidden)]
         pub unsafe extern "C" fn #vtable_glue() -> *const ::cxx_async::CxxAsyncVtable {
             static VTABLE: ::cxx_async::CxxAsyncVtable = ::cxx_async::CxxAsyncVtable {
-                channel: ::cxx_async::channel::<#future, #sender, #receiver, #output> as *mut u8,
-                sender_send: ::cxx_async::sender_send::<#sender, #output> as *mut u8,
-                future_poll: ::cxx_async::future_poll::<#output, #future> as *mut u8,
-                execlet: ::cxx_async::execlet_bundle::<#future, #execlet, #output> as *mut u8,
+                channel: ::cxx_async::channel::<#future, #output> as *mut u8,
+                sender_send: ::cxx_async::sender_send::<#output> as *mut u8,
+                future_poll: ::cxx_async::future_poll::<#future, #output> as *mut u8,
+                execlet: ::cxx_async::execlet_bundle::<#future, #output> as *mut u8,
                 execlet_submit: ::cxx_async::execlet_submit::<#output> as *mut u8,
                 execlet_send: ::cxx_async::execlet_send::<#output> as *mut u8,
             };
@@ -272,17 +212,15 @@ fn mangle_cxx_name(tokens: &[CxxNameToken]) -> String {
 
     for token in tokens {
         match *token {
-            CxxNameToken::Name(name) => {
-                match substitutions.get(name) {
-                    None => {
-                        substitutions.insert(name, substitution_count);
-                        substitution_count += 1;
-                        write!(&mut string, "{}{}", name.len(), name).unwrap();
-                    }
-                    Some(&0) => write!(&mut string, "S_").unwrap(),
-                    Some(_) => unimplemented!(),
+            CxxNameToken::Name(name) => match substitutions.get(name) {
+                None => {
+                    substitutions.insert(name, substitution_count);
+                    substitution_count += 1;
+                    write!(&mut string, "{}{}", name.len(), name).unwrap();
                 }
-            }
+                Some(&0) => write!(&mut string, "S_").unwrap(),
+                Some(_) => unimplemented!(),
+            },
             CxxNameToken::StartQName => string.push_str("N"),
             CxxNameToken::EndQName => string.push_str("E"),
             CxxNameToken::StartTemplate => string.push_str("I"),
