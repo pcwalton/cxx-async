@@ -52,12 +52,14 @@ static VECTORS: Lazy<(Vec<f64>, Vec<f64>)> = Lazy::new(|| {
     (vector_a, vector_b)
 });
 
+// Simple PRNG that can be easily duplicated on the Rust and C++ sides to ensure identical output.
 struct Xorshift {
     state: u32,
 }
 
 impl Xorshift {
     fn new() -> Xorshift {
+        // Random, but constant, seed.
         Xorshift { state: 0x243f6a88 }
     }
 

@@ -12,6 +12,7 @@ class Xorshift {
     void operator=(Xorshift) = delete;
 
    public:
+    // Random, but constant, seed.
     Xorshift() : m_state(0x243f6a88) {}
 
     inline uint32_t next() {
