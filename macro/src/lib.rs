@@ -71,7 +71,8 @@ pub fn bridge_future(_: TokenStream, item: TokenStream) -> TokenStream {
         /// A future shared between Rust and C++.
         pub struct #future {
             // FIXME(pcwalton): Unfortunately, as far as I can tell this has to be double-boxed
-            // because we need the `RustFuture` type to be Sized.
+            // because we have to return these by value and we need the `RustFuture` type to be
+            // Sized.
             future: ::futures::future::BoxFuture<'static, ::cxx_async::CxxAsyncResult<#output>>,
         }
 

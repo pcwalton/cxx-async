@@ -1,6 +1,7 @@
 // cxx-async/examples/folly/build.rs
 
 use pkg_config::Config;
+use shlex::Shlex;
 use std::path::PathBuf;
 use std::process::Command;
 use std::str::FromStr;
@@ -18,14 +19,12 @@ fn main() {
     // Unfortunately, the `pkg-config` crate doesn't successfully parse some of Folly's
     // dependencies, because it passes the raw `.so` files instead of using `-l` flags. So call
     // `pkg-config` manually.
-    //
-    // FIXME(pcwalton): Support quoting and escaping.
     let output = Command::new("pkg-config")
         .args(&["--static", "--libs", "libfolly"])
         .output()
         .expect("Failed to execute `pkg-config` to find Folly!");
     let output = String::from_utf8(output.stdout).expect("`pkg-config --libs` wasn't UTF-8!");
-    for arg in output.split_whitespace() {
+    for arg in Shlex::new(&output) {
         if arg.starts_with("-") {
             if arg.starts_with("-L") {
                 println!("cargo:rustc-link-search={}", &arg[2..]);
@@ -35,7 +34,7 @@ fn main() {
             continue;
         }
 
-        let path = PathBuf::from_str(arg).unwrap();
+        let path = PathBuf::from_str(&arg).unwrap();
         let (parent, lib_name) = match (path.parent(), path.file_stem()) {
             (Some(parent), Some(lib_name)) => (parent, lib_name),
             _ => continue,
