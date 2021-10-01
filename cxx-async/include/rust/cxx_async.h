@@ -40,7 +40,8 @@ class FutureVtableProvider {
     static const rust::async::Vtable<Future>* vtable();
 };
 
-// FIXME(pcwalton): Sender and Execlet being incomplete types is awfully weird.
+// FIXME(pcwalton): Is making these incomplete types the right thing to do? It requires the macro to
+// define drop glue for the `rust::Box` destructor to call, and that's a bit messy.
 template <typename Future>
 class RustSender;
 template <typename Future>

@@ -8,8 +8,6 @@ use std::str::FromStr;
 
 fn main() {
     // Folly's `.pc` file is missing the `fmt` and `boost_context` dependencies. Find them here.
-    // FIXME(pcwalton): Is there a better method to find Boost? Look at what CMake does, maybe. Or
-    // just fix Folly.
     Config::new()
         .statik(true)
         .probe("fmt")
