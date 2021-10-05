@@ -67,7 +67,7 @@ pub fn bridge_future(_: TokenStream, item: TokenStream) -> TokenStream {
         future.span(),
     );
 
-    quote! {
+    (quote! {
         /// A future shared between Rust and C++.
         pub struct #future {
             // FIXME(pcwalton): Unfortunately, as far as I can tell this has to be double-boxed
@@ -166,7 +166,7 @@ pub fn bridge_future(_: TokenStream, item: TokenStream) -> TokenStream {
             };
             return &VTABLE;
         }
-    }
+    })
     .into()
 }
 
