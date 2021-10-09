@@ -120,7 +120,19 @@ cppcoro::task<rust::String> call_rust() {
 
 That's it! You should now be able to freely await futures on either side.
 
-## Code of Conduct
+## Installation notes
+
+You will need a C++ compiler that implements the coroutines TS, which generally coincides with
+support for C++20. Some C++ compilers (e.g. Apple clang 13.0.0) that implement the coroutines TS
+crash when compiling Folly. It's also recommended to use `libc++` instead of `libstdc++`, as the
+former has more complete support for coroutines.
+
+Usage of `cxx-async` with Folly requires that Folly have been built with coroutine support. This
+generally means that you need to build Folly with `-DCXX_STD=20`. Many distributions of Folly (e.g.
+the one in Homebrew) don't have coroutine support enabled; a common symptom of this is a linker
+error mentioning a missing symbol `folly::resumeCoroutineWithNewAsyncStackRoot`.
+
+## Code of conduct
 
 `cxx-async` follows the same Code of Conduct as Rust itself. Reports can be made to the crate
 authors.
