@@ -8,7 +8,8 @@
 struct RustFutureF64;
 struct RustFutureString;
 
-rust::Box<RustFutureF64> folly_dot_product();
+rust::Box<RustFutureF64> folly_dot_product_coro();
+rust::Box<RustFutureF64> folly_dot_product_futures();
 double folly_call_rust_dot_product();
 double folly_schedule_rust_dot_product();
 rust::Box<RustFutureF64> folly_not_product();

@@ -52,14 +52,15 @@ folly::Executor::KeepAlive<folly::CPUThreadPoolExecutor> g_thread_pool(
     new folly::CPUThreadPoolExecutor(THREAD_COUNT));
 
 // Multithreaded dot product computation.
-static folly::coro::Task<double> dot_product_inner(const double a[],
-                                                   const double b[],
-                                                   size_t count) {
+static folly::coro::Task<double> do_dot_product_coro(const double a[],
+                                                     const double b[],
+                                                     size_t count) {
     if (count > EXAMPLE_SPLIT_LIMIT) {
         size_t half_count = count / 2;
-        folly::Future<double> taskA = dot_product_inner(a, b, half_count).semi().via(g_thread_pool);
+        folly::Future<double> taskA =
+            do_dot_product_coro(a, b, half_count).semi().via(g_thread_pool);
         folly::Future<double> taskB =
-            dot_product_inner(a + half_count, b + half_count, count - half_count)
+            do_dot_product_coro(a + half_count, b + half_count, count - half_count)
                 .semi()
                 .via(g_thread_pool);
         auto [first, second] = co_await folly::collectAll(std::move(taskA), std::move(taskB));
@@ -72,7 +73,7 @@ static folly::coro::Task<double> dot_product_inner(const double a[],
     co_return sum;
 }
 
-static folly::coro::Task<double> dot_product() {
+static folly::coro::Task<double> dot_product_coro() {
     Xorshift rand;
     std::vector<double> array_a, array_b;
     for (size_t i = 0; i < EXAMPLE_ARRAY_SIZE; i++) {
@@ -80,7 +81,40 @@ static folly::coro::Task<double> dot_product() {
         array_b.push_back((double)rand.next());
     }
 
-    co_return co_await dot_product_inner(&array_a[0], &array_b[0], array_a.size());
+    co_return co_await do_dot_product_coro(&array_a[0], &array_b[0], array_a.size());
+}
+
+// Multithreaded dot product computation, explicitly using Folly futures.
+static folly::Future<double> do_dot_product_futures(const double a[],
+                                                    const double b[],
+                                                    size_t count) {
+    if (count > EXAMPLE_SPLIT_LIMIT) {
+        size_t half_count = count / 2;
+        folly::Future<double> taskA = do_dot_product_futures(a, b, half_count);
+        folly::Future<double> taskB =
+            do_dot_product_futures(a + half_count, b + half_count, count - half_count);
+        return folly::collectAll(std::move(taskA), std::move(taskB))
+            .via(g_thread_pool)
+            .thenValue([](auto&& results) {
+                return std::get<0>(results).value() + std::get<1>(results).value();
+            });
+    }
+
+    double sum = 0.0;
+    for (size_t i = 0; i < count; i++)
+        sum += a[i] * b[i];
+    return folly::makeSemiFuture(std::move(sum)).via(g_thread_pool);
+}
+
+static folly::Future<double> dot_product_futures() {
+    Xorshift rand;
+    std::vector<double> array_a, array_b;
+    for (size_t i = 0; i < EXAMPLE_ARRAY_SIZE; i++) {
+        array_a.push_back((double)rand.next());
+        array_b.push_back((double)rand.next());
+    }
+
+    return do_dot_product_futures(&array_a[0], &array_b[0], array_a.size());
 }
 
 static folly::coro::Task<double> not_product() {
@@ -94,8 +128,12 @@ static folly::coro::Task<rust::String> ping_pong(int i) {
     co_return std::move(string) + "pong ";
 }
 
-rust::Box<RustFutureF64> folly_dot_product() {
-    co_return co_await dot_product();
+rust::Box<RustFutureF64> folly_dot_product_coro() {
+    co_return co_await dot_product_coro();
+}
+
+rust::Box<RustFutureF64> folly_dot_product_futures() {
+    co_return co_await dot_product_futures();
 }
 
 double folly_call_rust_dot_product() {

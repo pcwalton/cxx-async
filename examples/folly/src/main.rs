@@ -20,7 +20,8 @@ mod ffi {
 
     unsafe extern "C++" {
         include!("folly_example.h");
-        fn folly_dot_product() -> Box<RustFutureF64>;
+        fn folly_dot_product_coro() -> Box<RustFutureF64>;
+        fn folly_dot_product_futures() -> Box<RustFutureF64>;
         fn folly_call_rust_dot_product() -> f64;
         fn folly_schedule_rust_dot_product() -> f64;
         fn folly_not_product() -> Box<RustFutureF64>;
@@ -114,7 +115,11 @@ fn rust_folly_ping_pong(i: i32) -> Box<RustFutureString> {
 #[test]
 fn test_rust_calling_cpp_synchronously() {
     assert_eq!(
-        executor::block_on(ffi::folly_dot_product()).unwrap(),
+        executor::block_on(ffi::folly_dot_product_coro()).unwrap(),
+        75719554055754070000000.0
+    );
+    assert_eq!(
+        executor::block_on(ffi::folly_dot_product_futures()).unwrap(),
         75719554055754070000000.0
     );
 }
@@ -122,7 +127,10 @@ fn test_rust_calling_cpp_synchronously() {
 // Tests Rust calling C++ on a scheduler.
 #[test]
 fn test_rust_calling_cpp_on_scheduler() {
-    let future = ffi::folly_dot_product();
+    let future = ffi::folly_dot_product_coro();
+    let value = executor::block_on(THREAD_POOL.spawn_with_handle(future).unwrap()).unwrap();
+    assert_eq!(value, 75719554055754070000000.0);
+    let future = ffi::folly_dot_product_futures();
     let value = executor::block_on(THREAD_POOL.spawn_with_handle(future).unwrap()).unwrap();
     assert_eq!(value, 75719554055754070000000.0);
 }
@@ -169,13 +177,15 @@ fn test_ping_pong() {
 
 fn main() {
     // Test Rust calling C++ async functions, both synchronously and via a scheduler.
-    let future = ffi::folly_dot_product();
-    println!("{}", executor::block_on(future).unwrap());
-    let future = ffi::folly_dot_product();
-    println!(
-        "{}",
-        executor::block_on(THREAD_POOL.spawn_with_handle(future).unwrap()).unwrap()
-    );
+    for fun in &[ffi::folly_dot_product_coro, ffi::folly_dot_product_futures] {
+        let future = fun();
+        println!("{}", executor::block_on(future).unwrap());
+        let future = fun();
+        println!(
+            "{}",
+            executor::block_on(THREAD_POOL.spawn_with_handle(future).unwrap()).unwrap()
+        );
+    }
 
     // Test C++ calling Rust async functions.
     ffi::folly_call_rust_dot_product();
