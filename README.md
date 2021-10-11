@@ -2,9 +2,9 @@
 
 ## Overview
 
-`cxx-async` is a Rust crate that extends the [`cxx`](http://cxx.rs/) library to provide seamless
-interoperability between asynchronous Rust code using `async`/`await` and [C++20 coroutines]
-using `co_await`. If your C++ code is asynchronous, `cxx-async` can provide a more convenient, and
+`cxx-async` is a Rust crate that extends the [`cxx`](http://cxx.rs/) library to provide
+interoperability between asynchronous Rust code using `async`/`await` and [C++20 coroutines] using
+`co_await`. If your C++ code is asynchronous, `cxx-async` can provide a more convenient, and
 potentially more efficient, alternative to callbacks. You can freely convert between C++ coroutines
 and Rust futures and await one from the other.
 
