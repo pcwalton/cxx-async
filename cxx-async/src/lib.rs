@@ -292,10 +292,7 @@ pub struct CxxAsyncExecletBundle<Future, Execlet> {
 // This is a simple Folly executor that drives a Rust future to completion. It's an implementation
 // detail and not directly exposed to the programmer.
 #[doc(hidden)]
-#[derive(Clone)]
-pub struct Execlet<Output>(Arc<Mutex<ExecletData<Output>>>)
-where
-    Output: Clone;
+pub struct Execlet<Output>(Arc<Mutex<ExecletData<Output>>>);
 
 // A continuation in an execlet's run queue.
 struct ExecletTask {
@@ -321,10 +318,7 @@ unsafe impl Send for ExecletTask {}
 unsafe impl Sync for ExecletTask {}
 
 // Internal state for an execlet.
-struct ExecletData<Output>
-where
-    Output: Clone,
-{
+struct ExecletData<Output> {
     // Tasks waiting to run.
     runqueue: VecDeque<ExecletTask>,
     // When done, the output value of the C++ task is stored here.
@@ -341,18 +335,12 @@ where
 //
 // This is an implementation detail and is not exposed to the programmer.
 #[doc(hidden)]
-pub struct ExecletFuture<Output>
-where
-    Output: Clone,
-{
+pub struct ExecletFuture<Output> {
     // The wrapped execlet that we take the result value from.
     execlet: Execlet<Output>,
 }
 
-impl<Output> Execlet<Output>
-where
-    Output: Clone,
-{
+impl<Output> Execlet<Output> {
     // Creates a new execlet.
     fn new() -> Execlet<Output> {
         Execlet(Arc::new(Mutex::new(ExecletData {
@@ -373,10 +361,14 @@ where
     }
 }
 
-impl<Output> ExecletFuture<Output>
-where
-    Output: Clone,
-{
+impl<Output> Clone for Execlet<Output> {
+    #[inline]
+    fn clone(&self) -> Execlet<Output> {
+        Execlet(self.0.clone())
+    }
+}
+
+impl<Output> ExecletFuture<Output> {
     // Creates a new ExecletFuture that will take its result value from the given Execlet.
     #[doc(hidden)]
     pub fn new(execlet: Execlet<Output>) -> Self {
@@ -384,10 +376,7 @@ where
     }
 }
 
-impl<Output> Future for ExecletFuture<Output>
-where
-    Output: Clone,
-{
+impl<Output> Future for ExecletFuture<Output> {
     type Output = CxxAsyncResult<Output>;
 
     // Wake up and run as many tasks as we can.
@@ -548,7 +537,7 @@ pub unsafe extern "C" fn execlet_bundle<Future, Output>(
     out_bundle: *mut CxxAsyncExecletBundle<Future, Execlet<Output>>,
 ) where
     Future: IntoCxxAsyncFuture<Output = Output>,
-    Output: Clone + Send + 'static,
+    Output: Send + 'static,
 {
     let (future, execlet) = Execlet::<Output>::bundle();
     let bundle = CxxAsyncExecletBundle {
@@ -567,9 +556,7 @@ pub unsafe extern "C" fn execlet_submit<Output>(
     this: &Execlet<Output>,
     run: extern "C" fn(*mut u8),
     task_data: *mut u8,
-) where
-    Output: Clone,
-{
+) {
     let mut this = this.0.lock().unwrap();
     this.runqueue.push_back(ExecletTask::new(run, task_data));
     if let Some(ref waker) = this.waker {
@@ -584,10 +571,11 @@ pub unsafe extern "C" fn execlet_submit<Output>(
 //
 // SAFETY: This is a low-level function called by our C++ code.
 #[doc(hidden)]
-pub unsafe extern "C" fn execlet_send<Output>(this: &Execlet<Output>, status: u32, value: *const u8)
-where
-    Output: Clone,
-{
+pub unsafe extern "C" fn execlet_send<Output>(
+    this: &Execlet<Output>,
+    status: u32,
+    value: *const u8,
+) {
     let mut this = this.0.lock().unwrap();
     assert!(this.result.is_none());
     this.result = Some(unpack_value_to_send(status, value));
