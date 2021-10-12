@@ -12,7 +12,10 @@ fn main() {
         .statik(true)
         .probe("fmt")
         .expect("No `fmt` package found!");
-    Config::new().statik(true).probe("gflags").expect("No `gflags` package found!");
+    Config::new()
+        .statik(true)
+        .probe("gflags")
+        .expect("No `gflags` package found!");
 
     // Unfortunately, the `pkg-config` crate doesn't successfully parse some of Folly's
     // dependencies, because it passes the raw `.so` files instead of using `-l` flags. So call
@@ -68,8 +71,10 @@ fn main() {
         }
     }
     if !found_boost_context {
-        panic!("Could not find `boost_context`. Make sure either `libboost_context.a` or \
-            `libboost_context-mt.a` is located in the same directory as Folly.")
+        panic!(
+            "Could not find `boost_context`. Make sure either `libboost_context.a` or \
+            `libboost_context-mt.a` is located in the same directory as Folly."
+        )
     }
 
     let output = Command::new("pkg-config")
