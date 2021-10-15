@@ -4,6 +4,7 @@
 //!
 //! Don't depend on this crate directly; just use the reexported macro in `cxx-async`.
 
+use bitvec::prelude::{bitvec, Lsb0};
 use proc_macro::{Spacing, TokenStream, TokenTree};
 use quote::quote;
 use std::collections::HashMap;
@@ -25,10 +26,10 @@ use syn::{Fields, Ident, ItemStruct};
 /// the future yields when awaited; on the Rust side it will be automatically wrapped in a
 /// `CxxAsyncResult`. On the C++ side it will be converted to the appropriate type, following the
 /// `cxx` rules. Err returns are translated into C++ exceptions.
-/// 
+///
 /// If the future is inside a C++ namespace, add a `namespace = ...` attribute to the
 /// `#[cxx_async::bridge_future]` attribute like so:
-/// 
+///
 /// ```ignore
 /// #[cxx::bridge]
 /// #[namespace = mycompany::myproject]
@@ -37,7 +38,7 @@ use syn::{Fields, Ident, ItemStruct};
 ///         type RustFutureStringNamespaced;
 ///     }
 /// }
-/// 
+///
 /// #[cxx_async::bridge_future(namespace = mycompany::myproject)]
 /// struct RustFutureStringNamespaced(String);
 /// ```
@@ -312,21 +313,38 @@ fn mangle_cxx_name(tokens: &[CxxNameToken]) -> String {
     let mut string = "_Z".to_owned();
     let (mut substitutions, mut substitution_count) = (HashMap::new(), 0u32);
 
+    // A stack of groups. True if substitution is eligible in this context; false if it is not.
+    let mut substitution_eligible = bitvec![1];
+
     for token in tokens {
         match *token {
-            CxxNameToken::Name(name) => match substitutions.get(name) {
-                None => {
-                    substitutions.insert(name, substitution_count);
-                    substitution_count += 1;
-                    write!(&mut string, "{}{}", name.len(), name).unwrap();
+            CxxNameToken::Name(name) if *substitution_eligible.last().unwrap() => {
+                match substitutions.get(name) {
+                    None => {
+                        substitutions.insert(name, substitution_count);
+                        substitution_count += 1;
+                        write!(&mut string, "{}{}", name.len(), name).unwrap();
+                        *substitution_eligible.last_mut().unwrap() = false;
+                    }
+                    Some(&0) => write!(&mut string, "S_").unwrap(),
+                    Some(_) => unimplemented!(),
                 }
-                Some(&0) => write!(&mut string, "S_").unwrap(),
-                Some(_) => unimplemented!(),
-            },
-            CxxNameToken::StartQName => string.push_str("N"),
-            CxxNameToken::EndQName => string.push_str("E"),
-            CxxNameToken::StartTemplate => string.push_str("I"),
-            CxxNameToken::EndTemplate => string.push_str("E"),
+            }
+            CxxNameToken::Name(name) => {
+                write!(&mut string, "{}{}", name.len(), name).unwrap();
+            }
+            CxxNameToken::StartQName => {
+                substitution_eligible.push(true);
+                string.push_str("N");
+            }
+            CxxNameToken::StartTemplate => {
+                substitution_eligible.push(true);
+                string.push_str("I")
+            }
+            CxxNameToken::EndQName | CxxNameToken::EndTemplate => {
+                substitution_eligible.pop();
+                string.push_str("E");
+            }
             CxxNameToken::VoidArg => string.push_str("v"),
         }
     }
