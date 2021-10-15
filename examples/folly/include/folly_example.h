@@ -8,8 +8,15 @@
 struct RustFutureF64;
 struct RustFutureString;
 
+namespace foo {
+namespace bar {
+struct RustFutureStringNamespaced;
+}
+}
+
 rust::Box<RustFutureF64> folly_dot_product_coro();
 rust::Box<RustFutureF64> folly_dot_product_futures();
+rust::Box<foo::bar::RustFutureStringNamespaced> folly_get_namespaced_string();
 double folly_call_rust_dot_product();
 double folly_schedule_rust_dot_product();
 rust::Box<RustFutureF64> folly_not_product();

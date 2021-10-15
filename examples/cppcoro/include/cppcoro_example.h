@@ -8,9 +8,16 @@
 struct RustFutureF64;
 struct RustFutureString;
 
+namespace foo {
+namespace bar {
+struct RustFutureStringNamespaced;
+}
+}
+
 rust::Box<RustFutureF64> cppcoro_dot_product();
 double cppcoro_call_rust_dot_product();
 double cppcoro_schedule_rust_dot_product();
+rust::Box<foo::bar::RustFutureStringNamespaced> cppcoro_get_namespaced_string();
 rust::Box<RustFutureF64> cppcoro_not_product();
 rust::String cppcoro_call_rust_not_product();
 rust::Box<RustFutureString> cppcoro_ping_pong(int i);

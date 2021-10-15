@@ -4,10 +4,11 @@
 //!
 //! Don't depend on this crate directly; just use the reexported macro in `cxx-async`.
 
-use proc_macro::TokenStream;
+use proc_macro::{Spacing, TokenStream, TokenTree};
 use quote::quote;
 use std::collections::HashMap;
 use std::fmt::Write;
+use std::iter;
 use syn::{Fields, Ident, ItemStruct};
 
 /// Defines a future type that can be awaited from both Rust and C++.
@@ -24,8 +25,26 @@ use syn::{Fields, Ident, ItemStruct};
 /// the future yields when awaited; on the Rust side it will be automatically wrapped in a
 /// `CxxAsyncResult`. On the C++ side it will be converted to the appropriate type, following the
 /// `cxx` rules. Err returns are translated into C++ exceptions.
+/// 
+/// If the future is inside a C++ namespace, add a `namespace = ...` attribute to the
+/// `#[cxx_async::bridge_future]` attribute like so:
+/// 
+/// ```ignore
+/// #[cxx::bridge]
+/// #[namespace = mycompany::myproject]
+/// mod ffi {
+///     extern "Rust" {
+///         type RustFutureStringNamespaced;
+///     }
+/// }
+/// 
+/// #[cxx_async::bridge_future(namespace = mycompany::myproject)]
+/// struct RustFutureStringNamespaced(String);
+/// ```
 #[proc_macro_attribute]
-pub fn bridge_future(_: TokenStream, item: TokenStream) -> TokenStream {
+pub fn bridge_future(attribute: TokenStream, item: TokenStream) -> TokenStream {
+    let namespace = parse_namespace_attribute(attribute);
+
     let struct_item: ItemStruct = match syn::parse(item) {
         Ok(struct_item) => struct_item,
         Err(_) => panic!("expected struct"),
@@ -44,26 +63,15 @@ pub fn bridge_future(_: TokenStream, item: TokenStream) -> TokenStream {
     let future_name_string = format!("{}", future);
 
     let drop_sender_glue = Ident::new(
-        &mangle_drop_glue("RustSender", &future_name_string),
+        &mangle_drop_glue("RustSender", &future_name_string, &namespace),
         future.span(),
     );
     let drop_execlet_glue = Ident::new(
-        &mangle_drop_glue("RustExeclet", &future_name_string),
+        &mangle_drop_glue("RustExeclet", &future_name_string, &namespace),
         future.span(),
     );
     let vtable_glue = Ident::new(
-        &mangle_cxx_name(&[
-            CxxNameToken::StartQName,
-            CxxNameToken::Name("rust"),
-            CxxNameToken::Name("async"),
-            CxxNameToken::Name("FutureVtableProvider"),
-            CxxNameToken::StartTemplate,
-            CxxNameToken::Name(&future_name_string),
-            CxxNameToken::EndTemplate,
-            CxxNameToken::Name("vtable"),
-            CxxNameToken::EndQName,
-            CxxNameToken::VoidArg,
-        ]),
+        &mangle_vtable_glue(&future_name_string, &namespace),
         future.span(),
     );
 
@@ -170,8 +178,51 @@ pub fn bridge_future(_: TokenStream, item: TokenStream) -> TokenStream {
     .into()
 }
 
-fn mangle_drop_glue(name: &str, future: &str) -> String {
-    mangle_cxx_name(&[
+fn parse_namespace_attribute(attribute: TokenStream) -> Vec<String> {
+    let mut attribute = attribute.into_iter();
+    match attribute.next() {
+        Some(TokenTree::Ident(key)) if key.to_string() == "namespace" => {}
+        None => return vec![],
+        Some(_) => panic!("expected `namespace = ...`"),
+    }
+
+    let mut namespace = vec![];
+    match attribute.next() {
+        Some(TokenTree::Punct(punct)) if punct.as_char() == '=' => {}
+        _ => panic!("expected `=` after `namespace`"),
+    }
+    loop {
+        // Parse `::`.
+        let mut tt = attribute.next();
+        match tt {
+            Some(TokenTree::Punct(punct))
+                if punct.as_char() == ':' && punct.spacing() == Spacing::Joint =>
+            {
+                tt = attribute.next();
+                match tt {
+                    Some(TokenTree::Punct(punct)) if punct.as_char() == ':' => {
+                        tt = attribute.next();
+                    }
+                    _ => panic!("expected `::` in namespace"),
+                }
+            }
+            Some(_) if namespace.is_empty() => {
+                // Leading `::` is optional.
+            }
+            Some(_) => panic!("expected `::` in namespace"),
+            None => break,
+        }
+
+        match tt {
+            Some(TokenTree::Ident(segment)) => namespace.push(segment.to_string()),
+            _ => panic!("expected namespace segment"),
+        }
+    }
+    namespace
+}
+
+fn mangle_drop_glue(name: &str, future: &str, namespace: &[String]) -> String {
+    let mut tokens = vec![
         CxxNameToken::StartQName,
         CxxNameToken::Name("rust"),
         CxxNameToken::Name("cxxbridge1"),
@@ -182,16 +233,50 @@ fn mangle_drop_glue(name: &str, future: &str) -> String {
         CxxNameToken::Name("async"),
         CxxNameToken::Name(name),
         CxxNameToken::StartTemplate,
-        CxxNameToken::Name(future),
+    ];
+    push_cxx_name_tokens_for_namespace(
+        &mut tokens,
+        namespace
+            .iter()
+            .map(|ident| &**ident)
+            .chain(iter::once(future)),
+    );
+    tokens.extend_from_slice(&[
         CxxNameToken::EndTemplate,
         CxxNameToken::EndQName,
         CxxNameToken::EndTemplate,
         CxxNameToken::Name("drop"),
         CxxNameToken::EndQName,
         CxxNameToken::VoidArg,
-    ])
+    ]);
+    mangle_cxx_name(&tokens)
 }
 
+fn mangle_vtable_glue(future_name_string: &str, namespace: &[String]) -> String {
+    let mut tokens = vec![
+        CxxNameToken::StartQName,
+        CxxNameToken::Name("rust"),
+        CxxNameToken::Name("async"),
+        CxxNameToken::Name("FutureVtableProvider"),
+        CxxNameToken::StartTemplate,
+    ];
+    push_cxx_name_tokens_for_namespace(
+        &mut tokens,
+        namespace
+            .iter()
+            .map(|ident| &**ident)
+            .chain(iter::once(future_name_string)),
+    );
+    tokens.extend_from_slice(&[
+        CxxNameToken::EndTemplate,
+        CxxNameToken::Name("vtable"),
+        CxxNameToken::EndQName,
+        CxxNameToken::VoidArg,
+    ]);
+    mangle_cxx_name(&tokens)
+}
+
+#[derive(Clone, Copy)]
 enum CxxNameToken<'a> {
     Name(&'a str),
     StartQName,
@@ -199,6 +284,22 @@ enum CxxNameToken<'a> {
     StartTemplate,
     EndTemplate,
     VoidArg,
+}
+
+fn push_cxx_name_tokens_for_namespace<'a, I>(tokens: &mut Vec<CxxNameToken<'a>>, name: I)
+where
+    I: Iterator<Item = &'a str> + Clone,
+{
+    let is_namespaced = name.clone().count() > 1;
+    if is_namespaced {
+        tokens.push(CxxNameToken::StartQName);
+    }
+    for segment in name {
+        tokens.push(CxxNameToken::Name(segment));
+    }
+    if is_namespaced {
+        tokens.push(CxxNameToken::EndQName);
+    }
 }
 
 // Mangles a C++ name.

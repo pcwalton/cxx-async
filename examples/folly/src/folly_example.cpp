@@ -39,6 +39,7 @@
 
 CXXASYNC_DEFINE_FUTURE(RustFutureF64, double);
 CXXASYNC_DEFINE_FUTURE(RustFutureString, rust::String);
+CXXASYNC_DEFINE_FUTURE(foo::bar::RustFutureStringNamespaced, rust::String);
 
 const size_t EXAMPLE_SPLIT_LIMIT = 32;
 const size_t EXAMPLE_ARRAY_SIZE = 16384;
@@ -134,6 +135,10 @@ rust::Box<RustFutureF64> folly_dot_product_coro() {
 
 rust::Box<RustFutureF64> folly_dot_product_futures() {
     co_return co_await dot_product_futures();
+}
+
+rust::Box<foo::bar::RustFutureStringNamespaced> folly_get_namespaced_string() {
+    co_return rust::String("hello world");
 }
 
 double folly_call_rust_dot_product() {

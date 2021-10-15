@@ -3,6 +3,7 @@
 //! Demonstrates how to use `cxx-async` with `cppcoro`.
 
 use async_recursion::async_recursion;
+use crate::ffi::StringNamespaced;
 use cxx_async::CxxAsyncException;
 use futures::executor::{self, ThreadPool};
 use futures::join;
@@ -12,9 +13,16 @@ use std::ops::Range;
 
 #[cxx::bridge]
 mod ffi {
+    #[derive(Debug, PartialEq)]
+    struct StringNamespaced {
+        namespaced_string: String,
+    }
+
     extern "Rust" {
         type RustFutureF64;
         type RustFutureString;
+        #[namespace = foo::bar]
+        type RustFutureStringNamespaced;
         fn rust_dot_product() -> Box<RustFutureF64>;
         fn rust_not_product() -> Box<RustFutureF64>;
         fn rust_cppcoro_ping_pong(i: i32) -> Box<RustFutureString>;
@@ -26,6 +34,7 @@ mod ffi {
         fn cppcoro_dot_product() -> Box<RustFutureF64>;
         fn cppcoro_call_rust_dot_product() -> f64;
         fn cppcoro_schedule_rust_dot_product() -> f64;
+        fn cppcoro_get_namespaced_string() -> Box<RustFutureStringNamespaced>;
         fn cppcoro_not_product() -> Box<RustFutureF64>;
         fn cppcoro_call_rust_not_product() -> String;
         fn cppcoro_ping_pong(i: i32) -> Box<RustFutureString>;
@@ -36,6 +45,8 @@ mod ffi {
 struct RustFutureF64(f64);
 #[cxx_async::bridge_future]
 struct RustFutureString(String);
+#[cxx_async::bridge_future(namespace = foo::bar)]
+struct RustFutureStringNamespaced(StringNamespaced);
 
 const VECTOR_LENGTH: usize = 16384;
 const SPLIT_LIMIT: usize = 32;
@@ -122,6 +133,12 @@ fn test_rust_calling_cpp_synchronously() {
         executor::block_on(ffi::cppcoro_dot_product()).unwrap(),
         75719554055754070000000.0
     );
+    assert_eq!(
+        executor::block_on(ffi::cppcoro_get_namespaced_string()).unwrap(),
+        StringNamespaced {
+            namespaced_string: "hello world".to_owned(),
+        }
+    );
 }
 
 // Tests Rust calling C++ on a scheduler.
@@ -181,6 +198,8 @@ fn main() {
         "{}",
         executor::block_on(THREAD_POOL.spawn_with_handle(future).unwrap()).unwrap()
     );
+    let future = ffi::cppcoro_get_namespaced_string();
+    println!("{:?}", executor::block_on(future).unwrap());
 
     // Test C++ calling Rust async functions.
     println!("{}", ffi::cppcoro_call_rust_dot_product());

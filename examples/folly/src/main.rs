@@ -13,6 +13,8 @@ mod ffi {
     extern "Rust" {
         type RustFutureF64;
         type RustFutureString;
+        #[namespace = foo::bar]
+        type RustFutureStringNamespaced;
         fn rust_dot_product() -> Box<RustFutureF64>;
         fn rust_not_product() -> Box<RustFutureF64>;
         fn rust_folly_ping_pong(i: i32) -> Box<RustFutureString>;
@@ -22,6 +24,7 @@ mod ffi {
         include!("folly_example.h");
         fn folly_dot_product_coro() -> Box<RustFutureF64>;
         fn folly_dot_product_futures() -> Box<RustFutureF64>;
+        fn folly_get_namespaced_string() -> Box<RustFutureStringNamespaced>;
         fn folly_call_rust_dot_product() -> f64;
         fn folly_schedule_rust_dot_product() -> f64;
         fn folly_not_product() -> Box<RustFutureF64>;
@@ -34,6 +37,8 @@ mod ffi {
 struct RustFutureF64(f64);
 #[cxx_async::bridge_future]
 struct RustFutureString(String);
+#[cxx_async::bridge_future(namespace = foo::bar)]
+struct RustFutureStringNamespaced(String);
 
 const VECTOR_LENGTH: usize = 16384;
 const SPLIT_LIMIT: usize = 32;
@@ -122,6 +127,10 @@ fn test_rust_calling_cpp_synchronously() {
         executor::block_on(ffi::folly_dot_product_futures()).unwrap(),
         75719554055754070000000.0
     );
+    assert_eq!(
+        executor::block_on(ffi::folly_get_namespaced_string()).unwrap(),
+        "hello world"
+    );
 }
 
 // Tests Rust calling C++ on a scheduler.
@@ -186,6 +195,8 @@ fn main() {
             executor::block_on(THREAD_POOL.spawn_with_handle(future).unwrap()).unwrap()
         );
     }
+    let future = ffi::folly_get_namespaced_string();
+    println!("{:?}", executor::block_on(future).unwrap());
 
     // Test C++ calling Rust async functions.
     ffi::folly_call_rust_dot_product();
