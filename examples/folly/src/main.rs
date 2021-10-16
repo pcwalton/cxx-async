@@ -30,6 +30,8 @@ mod ffi {
         fn folly_not_product() -> Box<RustFutureF64>;
         fn folly_call_rust_not_product() -> String;
         fn folly_ping_pong(i: i32) -> Box<RustFutureString>;
+        fn folly_send_to_dropped_future_go();
+        fn folly_send_to_dropped_future() -> Box<RustFutureF64>;
     }
 }
 
@@ -184,6 +186,13 @@ fn test_ping_pong() {
     assert_eq!(result, "ping pong ping pong ping pong ping pong ping pong ");
 }
 
+// Test dropping futures.
+#[test]
+fn test_dropping_futures() {
+    ffi::folly_send_to_dropped_future();
+    ffi::folly_send_to_dropped_future_go();
+}
+
 fn main() {
     // Test Rust calling C++ async functions, both synchronously and via a scheduler.
     for fun in &[ffi::folly_dot_product_coro, ffi::folly_dot_product_futures] {
@@ -215,4 +224,8 @@ fn main() {
     // Test yielding across the boundary repeatedly.
     let future = ffi::folly_ping_pong(0);
     println!("{}", executor::block_on(future).unwrap());
+
+    // Test dropping futures.
+    ffi::folly_send_to_dropped_future();
+    ffi::folly_send_to_dropped_future_go();
 }

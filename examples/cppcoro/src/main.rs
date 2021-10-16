@@ -38,6 +38,8 @@ mod ffi {
         fn cppcoro_not_product() -> Box<RustFutureF64>;
         fn cppcoro_call_rust_not_product() -> String;
         fn cppcoro_ping_pong(i: i32) -> Box<RustFutureString>;
+        fn cppcoro_send_to_dropped_future_go();
+        fn cppcoro_send_to_dropped_future() -> Box<RustFutureF64>;
     }
 }
 
@@ -189,6 +191,13 @@ fn test_ping_pong() {
     assert_eq!(result, "ping pong ping pong ping pong ping pong ping pong ");
 }
 
+// Test dropping futures.
+#[test]
+fn test_dropping_futures() {
+    ffi::cppcoro_send_to_dropped_future();
+    ffi::cppcoro_send_to_dropped_future_go();
+}
+
 fn main() {
     // Test Rust calling C++ async functions, both synchronously and via a scheduler.
     let future = ffi::cppcoro_dot_product();
@@ -218,4 +227,8 @@ fn main() {
     // Test yielding across the boundary repeatedly.
     let future = ffi::cppcoro_ping_pong(0);
     println!("{}", executor::block_on(future).unwrap());
+
+    // Test dropping futures.
+    ffi::cppcoro_send_to_dropped_future();
+    ffi::cppcoro_send_to_dropped_future_go();
 }

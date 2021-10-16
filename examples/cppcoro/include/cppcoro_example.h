@@ -21,5 +21,7 @@ rust::Box<foo::bar::RustFutureStringNamespaced> cppcoro_get_namespaced_string();
 rust::Box<RustFutureF64> cppcoro_not_product();
 rust::String cppcoro_call_rust_not_product();
 rust::Box<RustFutureString> cppcoro_ping_pong(int i);
+void cppcoro_send_to_dropped_future_go();
+rust::Box<RustFutureF64> cppcoro_send_to_dropped_future();
 
 #endif  // CXX_ASYNC_CPPCORO_EXAMPLE_H

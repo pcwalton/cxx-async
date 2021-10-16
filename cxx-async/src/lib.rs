@@ -475,21 +475,21 @@ unsafe fn unpack_value_to_send<Output>(status: u32, value: *const u8) -> CxxAsyn
 // SAFETY: This is a low-level function called by our C++ code.
 //
 // Takes ownership of the value. The caller must not call its destructor.
+//
+// Any errors when sending are dropped on the floor. This is the right behavior because futures
+// can be legally dropped in Rust to signal cancellation.
 #[doc(hidden)]
 pub unsafe extern "C" fn sender_send<Output>(
     this: &mut CxxAsyncSender<Output>,
     status: u32,
     value: *const u8,
 ) {
-    match this
-        .0
-        .take()
-        .unwrap()
-        .send(unpack_value_to_send(status, value))
-    {
-        Ok(_) => {}
-        Err(_) => panic!("Failed to send!"),
-    }
+    drop(
+        this.0
+            .take()
+            .unwrap()
+            .send(unpack_value_to_send(status, value)),
+    );
 }
 
 // C++ calls this to poll a wrapped Rust future.

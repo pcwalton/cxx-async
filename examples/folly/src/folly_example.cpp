@@ -168,3 +168,26 @@ rust::String folly_call_rust_not_product() {
 rust::Box<RustFutureString> folly_ping_pong(int i) {
     co_return co_await ping_pong(i);
 }
+
+// Can't use a C++ `std::binary_semaphore` here because Apple doesn't support it.
+static bool g_dropped_future_dropped = false;
+static std::condition_variable g_dropped_future_condvar;
+static std::mutex g_dropped_future_mutex;
+
+static folly::coro::Task<double> folly_send_to_dropped_future_inner() {
+    {
+        std::unique_lock<std::mutex> guard(g_dropped_future_mutex);
+        g_dropped_future_condvar.wait(guard, [] { return g_dropped_future_dropped; });
+    }
+    co_return 1.0;
+}
+
+void folly_send_to_dropped_future_go() {
+    std::lock_guard<std::mutex> guard(g_dropped_future_mutex);
+    g_dropped_future_dropped = true;
+    g_dropped_future_condvar.notify_all();
+}
+
+rust::Box<RustFutureF64> folly_send_to_dropped_future() {
+    co_return co_await folly_send_to_dropped_future_inner().semi().via(g_thread_pool);
+}

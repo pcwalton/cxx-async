@@ -3,6 +3,7 @@
 // An example showing how to interoperate with `cppcoro`.
 
 #include "cppcoro_example.h"
+#include <condition_variable>
 #include <cppcoro/fmap.hpp>
 #include <cppcoro/schedule_on.hpp>
 #include <cppcoro/static_thread_pool.hpp>
@@ -14,9 +15,11 @@
 #include <experimental/coroutine>
 #include <functional>
 #include <iosfwd>
+#include <mutex>
 #include <new>
 #include <stdexcept>
 #include <string>
+#include <thread>
 #include <tuple>
 #include <type_traits>
 #include <vector>
@@ -100,4 +103,27 @@ rust::String cppcoro_call_rust_not_product() {
 rust::Box<RustFutureString> cppcoro_ping_pong(int i) {
     std::string string(co_await rust_cppcoro_ping_pong(i));
     co_return std::move(string) + "pong ";
+}
+
+// Can't use a C++ `std::binary_semaphore` here because Apple doesn't support it.
+static bool g_dropped_future_dropped = false;
+static std::condition_variable g_dropped_future_condvar;
+static std::mutex g_dropped_future_mutex;
+
+static cppcoro::task<double> cppcoro_send_to_dropped_future_inner() {
+    {
+        std::unique_lock<std::mutex> guard(g_dropped_future_mutex);
+        g_dropped_future_condvar.wait(guard, [] { return g_dropped_future_dropped; });
+    }
+    co_return 1.0;
+}
+
+void cppcoro_send_to_dropped_future_go() {
+    std::lock_guard<std::mutex> guard(g_dropped_future_mutex);
+    g_dropped_future_dropped = true;
+    g_dropped_future_condvar.notify_all();
+}
+
+rust::Box<RustFutureF64> cppcoro_send_to_dropped_future() {
+    co_return co_await cppcoro::schedule_on(g_thread_pool, cppcoro_send_to_dropped_future_inner());
 }
