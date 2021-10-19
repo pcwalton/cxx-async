@@ -22,6 +22,7 @@ mod ffi {
 
     unsafe extern "C++" {
         include!("folly_example.h");
+
         fn folly_dot_product_coro() -> Box<RustFutureF64>;
         fn folly_dot_product_futures() -> Box<RustFutureF64>;
         fn folly_get_namespaced_string() -> Box<RustFutureStringNamespaced>;

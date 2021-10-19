@@ -8,7 +8,6 @@
 #include <folly/executors/ManualExecutor.h>
 #include <folly/experimental/coro/Task.h>
 #include <folly/experimental/coro/ViaIfAsync.h>
-#include <iostream>
 #include <mutex>
 #include <queue>
 #include "rust/cxx_async.h"
@@ -68,10 +67,13 @@ rust::Box<Future> folly_task_to_rust_future(folly::coro::Task<RustResultFor<Futu
         new Execlet<Future>(std::move(bundle.execlet)));
     folly::coro::TaskWithExecutor<Result> boundTask = std::move(task).scheduleOn(execlet);
     std::move(boundTask).start([execlet = std::move(execlet)](folly::Try<Result>&& result) {
-        if (result.hasException())
-            execlet->send_exception(result.exception().get_exception()->what());
-        else
+        if (result.hasException()) {
+            behavior::TryCatch<Future, behavior::Custom>::trycatch(
+                [&]() { std::rethrow_exception(result.exception().to_exception_ptr()); },
+                [&](const char* what) { execlet->send_exception(what); });
+        } else {
             execlet->send_value(std::move(result.value()));
+        }
     });
 
     return std::move(bundle.future);

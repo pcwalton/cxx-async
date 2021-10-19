@@ -86,7 +86,7 @@ double cppcoro_schedule_rust_dot_product() {
 
 rust::Box<RustFutureF64> cppcoro_not_product() {
     if (true)
-        throw std::runtime_error("kaboom");
+        throw MyException("kaboom");
     co_return 1.0;  // Just to make this function a coroutine.
 }
 

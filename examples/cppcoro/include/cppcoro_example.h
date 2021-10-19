@@ -4,15 +4,49 @@
 #define CXX_ASYNC_CPPCORO_EXAMPLE_H
 
 #include "rust/cxx.h"
+#include "rust/cxx_async.h"
 
 struct RustFutureF64;
 struct RustFutureString;
 
+class MyException : public std::exception {
+    const char* m_message;
+
+   public:
+    MyException(const char* message) : m_message(message) {}
+    const char* message() const noexcept { return m_message; }
+};
+
+namespace rust {
+namespace async {
+namespace behavior {
+
+template<typename T>
+struct TryCatch<T, Custom> {
+    template <typename Try, typename Fail>
+    static void trycatch(Try&& func, Fail&& fail) noexcept {
+        try {
+            func();
+        } catch (const MyException& exception) {
+            fail(exception.message());
+        } catch (const std::exception& exception) {
+            // Should never get here.
+            std::terminate();
+        }
+    }
+};
+
+}  // namespace behavior
+}  // namespace async
+}  // namespace rust
+
 namespace foo {
 namespace bar {
+
 struct RustFutureStringNamespaced;
-}
-}
+
+}  // namespace bar
+}  // namespace foo
 
 rust::Box<RustFutureF64> cppcoro_dot_product();
 double cppcoro_call_rust_dot_product();

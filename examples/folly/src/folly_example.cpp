@@ -120,7 +120,7 @@ static folly::Future<double> dot_product_futures() {
 
 static folly::coro::Task<double> not_product() {
     if (true)
-        throw std::runtime_error("kaboom");
+        throw MyException("kaboom");
     co_return 1.0;  // Just to make this function a coroutine.
 }
 

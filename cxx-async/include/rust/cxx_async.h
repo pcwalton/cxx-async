@@ -5,15 +5,16 @@
 
 #include <atomic>
 #include <cstdint>
+#include <cstring>
 #include <exception>
 #include <experimental/coroutine>
 #include <functional>
-#include <iostream>
 #include <memory>
 #include <mutex>
 #include <new>
 #include <stdexcept>
 #include <type_traits>
+#include <utility>
 #include "rust/cxx.h"
 
 #define CXXASYNC_ASSERT(cond) ::rust::async::cxxasync_assert(cond)
@@ -55,6 +56,82 @@ template <typename Future>
 using RustResultFor = typename RustFutureTraits<Future>::Result;
 
 class SuspendedCoroutine;
+
+// This has to be separate from `rust::Error` because constructing a `rust::Error` is private API.
+class Error final : public std::exception {
+    char* m_message;
+    void copy_from(const char* message) {
+        size_t len = std::strlen(message) + 1;
+        m_message = new char[len];
+        std::memcpy(reinterpret_cast<void*>(m_message), message, len);
+    }
+    void destroy() {
+        if (m_message != nullptr)
+            delete[] m_message;
+    }
+    Error(const char* message) { copy_from(message); }
+    template <typename Future>
+    friend class RustFutureReceiver;
+
+   public:
+    Error(const Error& other) { copy_from(other.m_message); }
+    Error(Error&& other) : m_message(other.m_message) { other.m_message = nullptr; }
+    ~Error() noexcept override { destroy(); }
+    Error& operator=(const Error& other) {
+        destroy();
+        copy_from(other.m_message);
+        return *this;
+    }
+    Error& operator=(Error&& other) noexcept {
+        m_message = other.m_message;
+        other.m_message = nullptr;
+        return *this;
+    }
+    const char* what() const noexcept override { return m_message; }
+};
+
+// Exception customization point. This works just like `rust::behavior::trycatch` [1], except that
+// it allows the `trycatch` behavior to declared anywhere before the future is used, reducing header
+// file ordering issues.
+//
+// Define a specialization of the `TryCatch` with this signature in order to customize exception
+// handling:
+//
+//      namespace behavior {
+//      template<typename T>
+//      struct TryCatch<T, Custom> {
+//          template<typename Try, typename Fail>
+//          static void trycatch(Try&& func, Fail&& fail) noexcept {
+//              ...
+//          }
+//      };
+//      } // end namespace behavior
+//
+// The useless-seeming `T` type parameter is required on the outer struct so that the name lookup
+// inside the `Future` template will happen in the second phase (instantiation time) as opposed to
+// the first phase (declaration time).
+//
+// This has to be separate from `rust::behavior::trycatch` because `cxx` won't always generate the
+// default definition of that function, and we can't force it to.
+//
+// [1]: https://cxx.rs/binding/result.html
+namespace behavior {
+
+struct Custom {};
+
+template<typename T, typename C>
+struct TryCatch {
+    template<typename Try, typename Fail>
+    static void trycatch(Try&& func, Fail&& fail) noexcept {
+        try {
+            func();
+        } catch (const std::exception& e) {
+            fail(e.what());
+        }
+    }
+};
+
+}  // namespace behavior
 
 void cxxasync_assert(bool cond);
 
@@ -138,7 +215,7 @@ class RustFutureReceiver {
             case FuturePollStatus::Complete:
                 return std::move(m_result.m_result);
             case FuturePollStatus::Error:
-                throw std::runtime_error(std::string(m_result.m_exception));
+                throw Error(m_result.m_exception.c_str());
             case FuturePollStatus::Pending:
                 CXXASYNC_ASSERT(false);
                 std::terminate();
@@ -291,16 +368,13 @@ class RustPromise {
     }
 
     void unhandled_exception() noexcept {
-        const Vtable<Future>* vtable = FutureVtableProvider<Future>::vtable();
-        try {
-            std::rethrow_exception(std::current_exception());
-        } catch (const std::exception& exception) {
-            vtable->sender_send(*m_oneshot.sender, static_cast<uint32_t>(FuturePollStatus::Error),
-                                exception.what());
-        } catch (...) {
-            vtable->sender_send(*m_oneshot.sender, static_cast<uint32_t>(FuturePollStatus::Error),
-                                "Unhandled C++ exception");
-        }
+        behavior::TryCatch<Future, behavior::Custom>::trycatch(
+            []() { std::rethrow_exception(std::current_exception()); },
+            [&](const char* what) {
+                const Vtable<Future>* vtable = FutureVtableProvider<Future>::vtable();
+                vtable->sender_send(*m_oneshot.sender,
+                                    static_cast<uint32_t>(FuturePollStatus::Error), what);
+            });
     }
 
     // Customization point for library integration (e.g. folly).
