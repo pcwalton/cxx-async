@@ -101,8 +101,7 @@ async fn dot_product(range: Range<usize>) -> f64 {
     }
 
     let (ref a, ref b) = *VECTORS;
-    let sum = range.clone().map(|index| a[index] * b[index]).sum();
-    sum
+    range.clone().map(|index| a[index] * b[index]).sum()
 }
 
 fn rust_dot_product() -> Box<RustFutureF64> {

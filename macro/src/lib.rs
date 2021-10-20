@@ -55,7 +55,7 @@ pub fn bridge_future(attribute: TokenStream, item: TokenStream) -> TokenStream {
             if fields.unnamed.len() != 1 {
                 panic!("expected a tuple struct with a single field");
             }
-            fields.unnamed.into_iter().nth(0).unwrap().ty
+            fields.unnamed.into_iter().next().unwrap().ty
         }
         Fields::Named { .. } | Fields::Unit => panic!("expected tuple struct"),
     };
@@ -335,17 +335,17 @@ fn mangle_cxx_name(tokens: &[CxxNameToken]) -> String {
             }
             CxxNameToken::StartQName => {
                 substitution_eligible.push(true);
-                string.push_str("N");
+                string.push('N');
             }
             CxxNameToken::StartTemplate => {
                 substitution_eligible.push(true);
-                string.push_str("I")
+                string.push('I')
             }
             CxxNameToken::EndQName | CxxNameToken::EndTemplate => {
                 substitution_eligible.pop();
-                string.push_str("E");
+                string.push('E');
             }
-            CxxNameToken::VoidArg => string.push_str("v"),
+            CxxNameToken::VoidArg => string.push('v'),
         }
     }
     string

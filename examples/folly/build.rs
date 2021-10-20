@@ -27,11 +27,11 @@ fn main() {
         .expect("Failed to execute `pkg-config` to find Folly!");
     let output = String::from_utf8(output.stdout).expect("`pkg-config --libs` wasn't UTF-8!");
     for arg in Shlex::new(&output) {
-        if arg.starts_with("-") {
-            if arg.starts_with("-L") {
-                lib_dirs.push(PathBuf::from(&arg[2..]));
-            } else if arg.starts_with("-l") {
-                println!("cargo:rustc-link-lib={}", &arg[2..]);
+        if arg.starts_with('-') {
+            if let Some(rest) = arg.strip_prefix("-L") {
+                lib_dirs.push(PathBuf::from(rest));
+            } else if let Some(rest) = arg.strip_prefix("-l") {
+                println!("cargo:rustc-link-lib={}", rest);
             }
             continue;
         }
@@ -42,9 +42,9 @@ fn main() {
             _ => continue,
         };
         let lib_name = lib_name.to_string_lossy();
-        if lib_name.starts_with("lib") {
+        if let Some(rest) = lib_name.strip_prefix("lib") {
             println!("cargo:rustc-link-search={}", parent.display());
-            println!("cargo:rustc-link-lib={}", &lib_name[3..]);
+            println!("cargo:rustc-link-lib={}", rest);
         }
     }
 
@@ -84,8 +84,8 @@ fn main() {
     let output = String::from_utf8(output.stdout).expect("`pkg-config --libs` wasn't UTF-8!");
     let mut include_dirs = vec![];
     for arg in output.split_whitespace() {
-        if arg.starts_with("-I") {
-            include_dirs.push(arg[2..].to_owned());
+        if let Some(rest) = arg.strip_prefix("-I") {
+            include_dirs.push(rest.to_owned());
         }
     }
 

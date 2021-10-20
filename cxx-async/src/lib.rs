@@ -423,7 +423,7 @@ pub trait IntoCxxAsyncFuture {
     where
         Fut: Future<Output = Self::Output> + Send + 'static,
     {
-        return Self::fallible(async move { Ok(future.await) });
+        Self::fallible(async move { Ok(future.await) })
     }
 
     /// Wraps a Rust Future that returns the output type, wrapped in a `CxxAsyncResult`.
