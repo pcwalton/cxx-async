@@ -67,10 +67,6 @@ pub fn bridge_future(attribute: TokenStream, item: TokenStream) -> TokenStream {
         &mangle_drop_glue("RustSender", &future_name_string, &namespace),
         future.span(),
     );
-    let drop_execlet_glue = Ident::new(
-        &mangle_drop_glue("RustExeclet", &future_name_string, &namespace),
-        future.span(),
-    );
     let vtable_glue = Ident::new(
         &mangle_vtable_glue(&future_name_string, &namespace),
         future.span(),
@@ -152,16 +148,6 @@ pub fn bridge_future(attribute: TokenStream, item: TokenStream) -> TokenStream {
             ::cxx_async::drop_glue(ptr)
         }
 
-        // The C++ bridge calls this to destroy an `Execlet`.
-        //
-        // SAFETY: This is a raw FFI function called by `cxx`. `cxx` ensures that `ptr` is a
-        // valid Box.
-        #[no_mangle]
-        #[doc(hidden)]
-        pub unsafe extern "C" fn #drop_execlet_glue(ptr: *mut Box<::cxx_async::Execlet<#output>>) {
-            ::cxx_async::drop_glue(ptr)
-        }
-
         #[no_mangle]
         #[doc(hidden)]
         pub unsafe extern "C" fn #vtable_glue() -> *const ::cxx_async::CxxAsyncVtable {
@@ -169,9 +155,6 @@ pub fn bridge_future(attribute: TokenStream, item: TokenStream) -> TokenStream {
                 channel: ::cxx_async::channel::<#future, #output> as *mut u8,
                 sender_send: ::cxx_async::sender_send::<#output> as *mut u8,
                 future_poll: ::cxx_async::future_poll::<#future, #output> as *mut u8,
-                execlet: ::cxx_async::execlet_bundle::<#future, #output> as *mut u8,
-                execlet_submit: ::cxx_async::execlet_submit::<#output> as *mut u8,
-                execlet_send: ::cxx_async::execlet_send::<#output> as *mut u8,
             };
             return &VTABLE;
         }

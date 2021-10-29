@@ -206,9 +206,6 @@ pub struct CxxAsyncVtable {
     pub channel: *mut u8,
     pub sender_send: *mut u8,
     pub future_poll: *mut u8,
-    pub execlet: *mut u8,
-    pub execlet_submit: *mut u8,
-    pub execlet_send: *mut u8,
 }
 
 unsafe impl Send for CxxAsyncVtable {}
@@ -230,13 +227,99 @@ where
     sender: Box<CxxAsyncSender<Out>>,
 }
 
+// Allows the Rust polling interface to drive C++ tasks to completion.
+//
+// This is needed by the Folly backend, to allow awaiting semifutures.
+#[derive(Clone)]
+#[doc(hidden)]
+pub struct Execlet(Arc<RustExeclet>);
+
+// The type that C++ sees for an execlet. This is opaque as far as C++ is concerned.
+#[doc(hidden)]
+pub struct RustExeclet(Mutex<ExecletImpl>);
+
+impl Execlet {
+    // Creates a new execlet with no waker and an empty runqueue.
+    fn new() -> Execlet {
+        Execlet(Arc::new(RustExeclet(Mutex::new(ExecletImpl {
+            runqueue: VecDeque::new(),
+            waker: None,
+            running: false,
+        }))))
+    }
+
+    // Consumes the reference.
+    unsafe fn from_raw(ptr: *const RustExeclet) -> Execlet {
+        Execlet(Arc::from_raw(ptr))
+    }
+
+    // Bumps the reference count.
+    unsafe fn from_raw_ref(ptr: *const RustExeclet) -> Execlet {
+        let this = Execlet::from_raw(ptr);
+        mem::forget(this.clone());
+        this
+    }
+
+    // Runs all tasks in the runqueue to completion.
+    fn run(&self, cx: &mut Context) {
+        // Lock.
+        let mut guard = self.0.0.lock().unwrap();
+        debug_assert!(!guard.running);
+        guard.running = true;
+
+        // Run as many tasks as we have.
+        guard.waker = Some((*cx.waker()).clone());
+        while let Some(task) = guard.runqueue.pop_front() {
+            // Drop the lock so that the task that we run can safely enqueue new tasks without
+            // deadlocking.
+            drop(guard);
+            unsafe {
+                task.run();
+            }
+            // Re-acquire the lock.
+            guard = self.0.0.lock().unwrap();
+        }
+
+        // Unlock.
+        guard.running = false;
+    }
+
+    // Submits a task to this execlet.
+    fn submit(&self, task: ExecletTask) {
+        let mut this = self.0.0.lock().unwrap();
+        this.runqueue.push_back(task);
+        if !this.running {
+            if let Some(ref waker) = this.waker {
+                // Avoid possible deadlocks.
+                let waker = (*waker).clone();
+                drop(this);
+                waker.wake_by_ref();
+            }
+        }
+    }
+}
+
+struct ExecletImpl {
+    // Tasks waiting to run.
+    runqueue: VecDeque<ExecletTask>,
+    // A Rust Waker that will be informed when we need to wake up and run some tasks in our
+    // runqueue or yield the result.
+    waker: Option<Waker>,
+    // True if we're running; false otherwise. This flag is necessary to avoid deadlocks resulting
+    // from recursive invocations.
+    running: bool,
+}
+
 // The concrete type of the future that wraps a C++ coroutine.
 //
 // The programmer only interacts with this abstractly behind a `Box<dyn Future>` trait object, so
 // this type is considered an implementation detail. It must be public because the
 // `define_cxx_future!` macro needs to name it.
 #[doc(hidden)]
-pub struct CxxAsyncReceiver<Output>(OneshotReceiver<CxxAsyncResult<Output>>);
+pub struct CxxAsyncReceiver<Output> {
+    receiver: OneshotReceiver<CxxAsyncResult<Output>>,
+    execlet: Option<Execlet>,
+}
 
 // The concrete type of the sending end of a future.
 //
@@ -247,7 +330,10 @@ pub struct CxxAsyncSender<Output>(Option<OneshotSender<CxxAsyncResult<Output>>>)
 impl<Output> Future for CxxAsyncReceiver<Output> {
     type Output = CxxAsyncResult<Output>;
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match Future::poll(Pin::new(&mut self.0), cx) {
+        if let Some(ref execlet) = self.execlet {
+            execlet.run(cx);
+        }
+        match Future::poll(Pin::new(&mut self.receiver), cx) {
             Poll::Pending => Poll::Pending,
             Poll::Ready(Ok(value)) => Poll::Ready(value),
             Poll::Ready(Err(Canceled)) => Poll::Ready(Err(CxxAsyncException::new(
@@ -259,7 +345,10 @@ impl<Output> Future for CxxAsyncReceiver<Output> {
 
 impl<Output> From<OneshotReceiver<CxxAsyncResult<Output>>> for CxxAsyncReceiver<Output> {
     fn from(receiver: OneshotReceiver<CxxAsyncResult<Output>>) -> Self {
-        Self(receiver)
+        CxxAsyncReceiver {
+            receiver,
+            execlet: None,
+        }
     }
 }
 
@@ -271,28 +360,6 @@ pub trait RustSender {
     type Output;
     fn send(&mut self, value: CxxAsyncResult<Self::Output>);
 }
-
-// An execlet and a future that extracts the return value from it.
-//
-// Execlets are used to drive Folly semi-futures from the Rust polling interface.
-//
-// This is an implementation detail and is not exposed to the programmer. It must match the
-// definition in `cxx_async.h`.
-#[doc(hidden)]
-#[repr(C)]
-pub struct CxxAsyncExecletBundle<Future, Execlet> {
-    // The receiving end.
-    future: Box<Future>,
-    // The driver.
-    execlet: Box<Execlet>,
-}
-
-// The mechanism that provides a Rust `Future` interface to a Folly semi-future.
-//
-// This is a simple Folly executor that drives a Rust future to completion. It's an implementation
-// detail and not directly exposed to the programmer.
-#[doc(hidden)]
-pub struct Execlet<Output>(Arc<Mutex<ExecletData<Output>>>);
 
 // A continuation in an execlet's run queue.
 struct ExecletTask {
@@ -316,97 +383,6 @@ impl ExecletTask {
 
 unsafe impl Send for ExecletTask {}
 unsafe impl Sync for ExecletTask {}
-
-// Internal state for an execlet.
-struct ExecletData<Output> {
-    // Tasks waiting to run.
-    runqueue: VecDeque<ExecletTask>,
-    // When done, the output value of the C++ task is stored here.
-    result: Option<CxxAsyncResult<Output>>,
-    // A Rust Waker that will be informed when we need to wake up and run some tasks in our
-    // runqueue or yield the result.
-    waker: Option<Waker>,
-    // True if we're running; false otherwise. This flag is necessary to avoid deadlocks resulting
-    // from recursive invocations.
-    running: bool,
-}
-
-// The concrete type of the Rust Future wrapping an execlet.
-//
-// This is an implementation detail and is not exposed to the programmer.
-#[doc(hidden)]
-pub struct ExecletFuture<Output> {
-    // The wrapped execlet that we take the result value from.
-    execlet: Execlet<Output>,
-}
-
-impl<Output> Execlet<Output> {
-    // Creates a new execlet.
-    fn new() -> Execlet<Output> {
-        Execlet(Arc::new(Mutex::new(ExecletData {
-            runqueue: VecDeque::new(),
-            result: None,
-            waker: None,
-            running: false,
-        })))
-    }
-
-    // Creates a new future/execlet pair.
-    fn bundle() -> (ExecletFuture<Output>, Self) {
-        let execlet = Self::new();
-        let future = ExecletFuture {
-            execlet: execlet.clone(),
-        };
-        (future, execlet)
-    }
-}
-
-impl<Output> Clone for Execlet<Output> {
-    #[inline]
-    fn clone(&self) -> Execlet<Output> {
-        Execlet(self.0.clone())
-    }
-}
-
-impl<Output> ExecletFuture<Output> {
-    // Creates a new ExecletFuture that will take its result value from the given Execlet.
-    #[doc(hidden)]
-    pub fn new(execlet: Execlet<Output>) -> Self {
-        ExecletFuture { execlet }
-    }
-}
-
-impl<Output> Future for ExecletFuture<Output> {
-    type Output = CxxAsyncResult<Output>;
-
-    // Wake up and run as many tasks as we can.
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        // Lock.
-        let mut guard = self.execlet.0.lock().unwrap();
-        debug_assert!(!guard.running);
-        guard.running = true;
-
-        // Run as many tasks as we have.
-        guard.waker = Some((*cx.waker()).clone());
-        while let Some(task) = guard.runqueue.pop_front() {
-            // Drop the lock so that the task that we run can safely enqueue new tasks without
-            // deadlocking.
-            drop(guard);
-            unsafe {
-                task.run();
-            }
-            // Re-acquire the lock.
-            guard = self.execlet.0.lock().unwrap();
-        }
-
-        // Fill in the result if necessary.
-        guard.running = false;
-        match guard.result.take() {
-            Some(result) => Poll::Ready(result),
-            None => Poll::Pending,
-        }
-    }
-}
 
 /// Wraps an arbitrary Rust Future in a boxed `cxx-async` future so that it can be returned to C++.
 ///
@@ -440,14 +416,22 @@ pub trait IntoCxxAsyncFuture {
 //
 // This needs an out pointer because of https://github.com/rust-lang/rust-bindgen/issues/778
 #[doc(hidden)]
-pub unsafe extern "C" fn channel<Fut, Out>(out_oneshot: *mut CxxAsyncOneshot<Fut, Out>)
-where
+pub unsafe extern "C" fn channel<Fut, Out>(
+    out_oneshot: *mut CxxAsyncOneshot<Fut, Out>,
+    execlet: *mut RustExeclet,
+) where
     Fut: From<CxxAsyncReceiver<Out>> + Future<Output = CxxAsyncResult<Out>>,
 {
     let (sender, receiver) = oneshot::channel();
     let oneshot = CxxAsyncOneshot {
         sender: Box::new(CxxAsyncSender(Some(sender))),
-        future: Box::new(CxxAsyncReceiver(receiver).into()),
+        future: Box::new(
+            CxxAsyncReceiver {
+                receiver,
+                execlet: Some(Execlet::from_raw_ref(execlet)),
+            }
+            .into(),
+        ),
     };
     ptr::copy_nonoverlapping(&oneshot, out_oneshot, 1);
     mem::forget(oneshot);
@@ -527,69 +511,6 @@ where
     }
 }
 
-// Generates a new future/execlet pair.
-//
-// SAFETY: This is a low-level function called by our C++ code.
-//
-// This needs an out pointer because of https://github.com/rust-lang/rust-bindgen/issues/778
-#[doc(hidden)]
-pub unsafe extern "C" fn execlet_bundle<Future, Output>(
-    out_bundle: *mut CxxAsyncExecletBundle<Future, Execlet<Output>>,
-) where
-    Future: IntoCxxAsyncFuture<Output = Output>,
-    Output: Send + 'static,
-{
-    let (future, execlet) = Execlet::<Output>::bundle();
-    let bundle = CxxAsyncExecletBundle {
-        future: Future::fallible(future),
-        execlet: Box::new(execlet),
-    };
-    ptr::copy_nonoverlapping(&bundle, out_bundle, 1);
-    mem::forget(bundle);
-}
-
-// C++ calls this to submit a new task to the execlet.
-//
-// SAFETY: This is a low-level function called by our C++ code.
-#[doc(hidden)]
-pub unsafe extern "C" fn execlet_submit<Output>(
-    this: &Execlet<Output>,
-    run: extern "C" fn(*mut u8),
-    task_data: *mut u8,
-) {
-    let mut this = this.0.lock().unwrap();
-    this.runqueue.push_back(ExecletTask::new(run, task_data));
-    if let Some(ref waker) = this.waker {
-        // Avoid possible deadlocks.
-        let waker = (*waker).clone();
-        drop(this);
-        waker.wake_by_ref();
-    }
-}
-
-// C++ calls this to place a final value in the appropriate slot in the execlet.
-//
-// SAFETY: This is a low-level function called by our C++ code.
-#[doc(hidden)]
-pub unsafe extern "C" fn execlet_send<Output>(
-    this: &Execlet<Output>,
-    status: u32,
-    value: *const u8,
-) {
-    let mut this = this.0.lock().unwrap();
-    assert!(this.result.is_none());
-    this.result = Some(unpack_value_to_send(status, value));
-
-    // Don't do this if we're running, or we might end up in a situation where the waker tries
-    // to poll us again, which is UB (and will deadlock in the C++ bindings).
-    if !this.running {
-        this.waker
-            .as_ref()
-            .expect("Send with no waker present?")
-            .wake_by_ref();
-    }
-}
-
 // The C++ bridge indirectly calls this to drop types.
 //
 // SAFETY: This is a low-level function called (indirectly) by `cxx`'s C++ code.
@@ -629,4 +550,31 @@ unsafe fn rust_suspended_coroutine_wake_by_ref(address: *const ()) {
 // SAFETY: This is a raw FFI function called by the currently-running Rust executor.
 unsafe fn rust_suspended_coroutine_drop(address: *const ()) {
     cxxasync_suspended_coroutine_drop(address as *mut () as *mut u8)
+}
+
+// Execlet FFI
+
+// C++ calls this to create a new execlet.
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn cxxasync_execlet_create() -> *const RustExeclet {
+    Arc::into_raw(Execlet::new().0)
+}
+
+// C++ calls this to decrement the reference count on an execlet and free it if the count hits zero.
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn cxxasync_execlet_release(this: *mut RustExeclet) {
+    drop(Execlet::from_raw(this))
+}
+
+// C++ calls this to submit a task to the execlet. This internally bumps the reference count.
+#[no_mangle]
+#[doc(hidden)]
+pub unsafe extern "C" fn cxxasync_execlet_submit(
+    this: *mut RustExeclet,
+    run: extern "C" fn(*mut u8),
+    task_data: *mut u8,
+) {
+    Execlet::from_raw_ref(this).submit(ExecletTask::new(run, task_data))
 }

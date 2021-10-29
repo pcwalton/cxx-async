@@ -130,14 +130,15 @@ static folly::coro::Task<rust::String> ping_pong(int i) {
 }
 
 rust::Box<RustFutureF64> folly_dot_product_coro() {
-    co_return co_await dot_product_coro();
+    co_return co_await dot_product_coro().semi();
 }
 
 rust::Box<RustFutureF64> folly_dot_product_futures() {
-    co_return co_await dot_product_futures();
+    co_return co_await dot_product_futures().semi();
 }
 
 rust::Box<foo::bar::RustFutureStringNamespaced> folly_get_namespaced_string() {
+    co_await dot_product_coro().semi();
     co_return rust::String("hello world");
 }
 
@@ -152,7 +153,7 @@ double folly_schedule_rust_dot_product() {
 }
 
 rust::Box<RustFutureF64> folly_not_product() {
-    co_return co_await not_product();
+    co_return co_await not_product().semi();
 }
 
 rust::String folly_call_rust_not_product() {
@@ -166,7 +167,7 @@ rust::String folly_call_rust_not_product() {
 }
 
 rust::Box<RustFutureString> folly_ping_pong(int i) {
-    co_return co_await ping_pong(i);
+    co_return co_await ping_pong(i).semi();
 }
 
 // Can't use a C++ `std::binary_semaphore` here because Apple doesn't support it.

@@ -46,11 +46,9 @@ class FutureVtableProvider {
 template <typename Future>
 class RustSender;
 template <typename Future>
-class RustExeclet;
-template <typename Future>
-struct RustExecletBundle;
-template <typename Future>
 struct RustOneshot;
+template <typename Future>
+class RustPromise;
 
 template <typename Future>
 using RustResultFor = typename RustFutureTraits<Future>::Result;
@@ -119,9 +117,9 @@ namespace behavior {
 
 struct Custom {};
 
-template<typename T, typename C>
+template <typename T, typename C>
 struct TryCatch {
-    template<typename Try, typename Fail>
+    template <typename Try, typename Fail>
     static void trycatch(Try&& func, Fail&& fail) noexcept {
         try {
             func();
@@ -134,6 +132,36 @@ struct TryCatch {
 }  // namespace behavior
 
 void cxxasync_assert(bool cond);
+
+// Execlet API
+struct RustExeclet;
+extern "C" {
+// Creates a new execlet.
+RustExeclet* cxxasync_execlet_create();
+// Decrements the reference count on an execlet and frees it if the count hits zero.
+void cxxasync_execlet_release(RustExeclet* self);
+// Submit a task to the execlet. This internally bumps the reference count.
+void cxxasync_execlet_submit(RustExeclet* self, void (*run)(void*), void* task);
+}
+
+// Execlet
+class Execlet {
+    RustExeclet* m_priv;
+
+    Execlet(const Execlet&) = delete;
+    Execlet& operator=(const Execlet&) = delete;
+
+   public:
+    Execlet() : m_priv(cxxasync_execlet_create()) {}
+
+    ~Execlet() { cxxasync_execlet_release(m_priv); }
+
+    void submit(void* task, void (*run)(void*)) noexcept {
+        cxxasync_execlet_submit(m_priv, run, task);
+    }
+
+    RustExeclet* raw() { return m_priv; }
+};
 
 enum class FuturePollStatus {
     Pending,
@@ -158,17 +186,16 @@ class AwaitTransformer {
     AwaitTransformer() = delete;
 
    public:
-    static Awaiter await_transform(Awaiter&& awaitable) noexcept { return std::move(awaitable); }
+    static auto await_transform(RustPromise<Future>& promise, Awaiter&& awaitable) noexcept {
+        return std::move(awaitable);
+    }
 };
 
 template <typename Future>
 struct Vtable {
-    RustOneshot<Future> (*channel)();
+    RustOneshot<Future> (*channel)(RustExeclet* execlet);
     void (*sender_send)(RustSender<Future>& self, uint32_t status, const void* value);
     uint32_t (*future_poll)(Future& self, void* result, const void* waker_data);
-    RustExecletBundle<Future> (*execlet)();
-    void (*execlet_submit)(const RustExeclet<Future>& self, void (*run)(void*), void* task);
-    void (*execlet_send)(const RustExeclet<Future>& self, uint32_t status, const void* value);
 };
 
 template <typename Future>
@@ -348,10 +375,17 @@ class RustPromise {
     typedef RustOneshot<Future> Oneshot;
     typedef RustResultFor<Future> Result;
 
+    // Don't change the order of these!
+    Execlet m_execlet;
     Oneshot m_oneshot;
 
+    RustPromise(const RustPromise&) = delete;
+    RustPromise& operator=(const RustPromise&) = delete;
+
    public:
-    RustPromise() : m_oneshot(FutureVtableProvider<Future>::vtable()->channel()) {}
+    RustPromise()
+        : m_execlet(),
+          m_oneshot(FutureVtableProvider<Future>::vtable()->channel(m_execlet.raw())) {}
 
     rust::Box<Future> get_return_object() noexcept { return std::move(m_oneshot.future); }
 
@@ -377,10 +411,12 @@ class RustPromise {
             });
     }
 
+    Execlet& execlet() noexcept { return m_execlet; }
+
     // Customization point for library integration (e.g. folly).
     template <typename Awaiter>
     auto await_transform(Awaiter&& awaitable) noexcept {
-        return AwaitTransformer<Awaiter, Future>::await_transform(std::move(awaitable));
+        return AwaitTransformer<Awaiter, Future>::await_transform(*this, std::move(awaitable));
     }
 };
 

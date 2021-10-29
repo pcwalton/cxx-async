@@ -106,24 +106,43 @@ rust::Box<RustFutureString> cppcoro_ping_pong(int i) {
 }
 
 // Can't use a C++ `std::binary_semaphore` here because Apple doesn't support it.
-static bool g_dropped_future_dropped = false;
-static std::condition_variable g_dropped_future_condvar;
-static std::mutex g_dropped_future_mutex;
+class Sem {
+    unsigned m_value;
+    std::condition_variable m_cond;
+    std::mutex m_mutex;
+
+    Sem(const Sem&) = delete;
+    Sem& operator=(const Sem&) = delete;
+
+   public:
+    Sem() : m_value(0) {}
+
+    void wait() {
+        std::unique_lock<std::mutex> guard(m_mutex);
+        m_cond.wait(guard, [&] { return m_value > 0; });
+        m_value--;
+    }
+
+    void signal() {
+        std::unique_lock<std::mutex> guard(m_mutex);
+        m_value++;
+        m_cond.notify_one();
+    }
+};
+
+// Intentionally leak this to avoid annoying data race issues on thread destruction.
+static Sem* g_dropped_future_sem;
 
 static cppcoro::task<double> cppcoro_send_to_dropped_future_inner() {
-    {
-        std::unique_lock<std::mutex> guard(g_dropped_future_mutex);
-        g_dropped_future_condvar.wait(guard, [] { return g_dropped_future_dropped; });
-    }
+    g_dropped_future_sem->wait();
     co_return 1.0;
 }
 
 void cppcoro_send_to_dropped_future_go() {
-    std::lock_guard<std::mutex> guard(g_dropped_future_mutex);
-    g_dropped_future_dropped = true;
-    g_dropped_future_condvar.notify_all();
+    g_dropped_future_sem->signal();
 }
 
 rust::Box<RustFutureF64> cppcoro_send_to_dropped_future() {
+    g_dropped_future_sem = new Sem;
     co_return co_await cppcoro::schedule_on(g_thread_pool, cppcoro_send_to_dropped_future_inner());
 }
