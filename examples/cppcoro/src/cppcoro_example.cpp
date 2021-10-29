@@ -29,6 +29,7 @@
 #include "rust/cxx_async.h"
 #include "rust/cxx_async_cppcoro.h"
 
+CXXASYNC_DEFINE_FUTURE(RustFutureVoid, void);
 CXXASYNC_DEFINE_FUTURE(RustFutureF64, double);
 CXXASYNC_DEFINE_FUTURE(RustFutureString, rust::String);
 CXXASYNC_DEFINE_FUTURE(foo::bar::RustFutureStringNamespaced, rust::String);
@@ -105,30 +106,10 @@ rust::Box<RustFutureString> cppcoro_ping_pong(int i) {
     co_return std::move(string) + "pong ";
 }
 
-// Can't use a C++ `std::binary_semaphore` here because Apple doesn't support it.
-class Sem {
-    unsigned m_value;
-    std::condition_variable m_cond;
-    std::mutex m_mutex;
-
-    Sem(const Sem&) = delete;
-    Sem& operator=(const Sem&) = delete;
-
-   public:
-    Sem() : m_value(0) {}
-
-    void wait() {
-        std::unique_lock<std::mutex> guard(m_mutex);
-        m_cond.wait(guard, [&] { return m_value > 0; });
-        m_value--;
-    }
-
-    void signal() {
-        std::unique_lock<std::mutex> guard(m_mutex);
-        m_value++;
-        m_cond.notify_one();
-    }
-};
+rust::Box<RustFutureVoid> cppcoro_complete() {
+    co_await dot_product();     // Discard the result.
+    co_return;
+}
 
 // Intentionally leak this to avoid annoying data race issues on thread destruction.
 static Sem* g_dropped_future_sem;

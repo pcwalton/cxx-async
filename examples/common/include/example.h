@@ -25,4 +25,29 @@ class Xorshift {
     }
 };
 
+// Can't use a C++ `std::binary_semaphore` here because Apple doesn't support it.
+class Sem {
+    unsigned m_value;
+    std::condition_variable m_cond;
+    std::mutex m_mutex;
+
+    Sem(const Sem&) = delete;
+    Sem& operator=(const Sem&) = delete;
+
+   public:
+    Sem() : m_value(0) {}
+
+    void wait() {
+        std::unique_lock<std::mutex> guard(m_mutex);
+        m_cond.wait(guard, [&] { return m_value > 0; });
+        m_value--;
+    }
+
+    void signal() {
+        std::unique_lock<std::mutex> guard(m_mutex);
+        m_value++;
+        m_cond.notify_one();
+    }
+};
+
 #endif  // CXX_ASYNC_EXAMPLE_H

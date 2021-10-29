@@ -46,7 +46,7 @@ class AwaitTransformer<folly::SemiFuture<Result>, Future> {
     AwaitTransformer() = delete;
 
    public:
-    static auto await_transform(RustPromise<Future>& promise,
+    static auto await_transform(RustPromiseBase<Future>& promise,
                                 folly::SemiFuture<Result>&& semifuture) noexcept {
         return std::move(semifuture).via(new FollyExeclet(promise.execlet()));
     }

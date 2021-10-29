@@ -19,6 +19,7 @@ mod ffi {
     }
 
     extern "Rust" {
+        type RustFutureVoid;
         type RustFutureF64;
         type RustFutureString;
         #[namespace = foo::bar]
@@ -38,11 +39,14 @@ mod ffi {
         fn cppcoro_not_product() -> Box<RustFutureF64>;
         fn cppcoro_call_rust_not_product() -> String;
         fn cppcoro_ping_pong(i: i32) -> Box<RustFutureString>;
+        fn cppcoro_complete() -> Box<RustFutureVoid>;
         fn cppcoro_send_to_dropped_future_go();
         fn cppcoro_send_to_dropped_future() -> Box<RustFutureF64>;
     }
 }
 
+#[cxx_async::bridge_future]
+struct RustFutureVoid(());
 #[cxx_async::bridge_future]
 struct RustFutureF64(f64);
 #[cxx_async::bridge_future]
@@ -190,6 +194,13 @@ fn test_ping_pong() {
     assert_eq!(result, "ping pong ping pong ping pong ping pong ping pong ");
 }
 
+// Test returning void.
+#[test]
+fn test_complete() {
+    executor::block_on(ffi::cppcoro_complete()).unwrap();
+}
+
+
 // Test dropping futures.
 #[test]
 fn test_dropping_futures() {
@@ -226,6 +237,10 @@ fn main() {
     // Test yielding across the boundary repeatedly.
     let future = ffi::cppcoro_ping_pong(0);
     println!("{}", executor::block_on(future).unwrap());
+
+    // Test returning void.
+    let future = ffi::cppcoro_complete();
+    executor::block_on(future).unwrap();
 
     // Test dropping futures.
     ffi::cppcoro_send_to_dropped_future();

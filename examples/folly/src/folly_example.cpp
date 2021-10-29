@@ -37,6 +37,7 @@
 #include "rust/cxx_async.h"
 #include "rust/cxx_async_folly.h"
 
+CXXASYNC_DEFINE_FUTURE(RustFutureVoid, void);
 CXXASYNC_DEFINE_FUTURE(RustFutureF64, double);
 CXXASYNC_DEFINE_FUTURE(RustFutureString, rust::String);
 CXXASYNC_DEFINE_FUTURE(foo::bar::RustFutureStringNamespaced, rust::String);
@@ -170,25 +171,24 @@ rust::Box<RustFutureString> folly_ping_pong(int i) {
     co_return co_await ping_pong(i).semi();
 }
 
-// Can't use a C++ `std::binary_semaphore` here because Apple doesn't support it.
-static bool g_dropped_future_dropped = false;
-static std::condition_variable g_dropped_future_condvar;
-static std::mutex g_dropped_future_mutex;
+rust::Box<RustFutureVoid> folly_complete() {
+    co_await dot_product_futures().semi();  // Discard the result.
+    co_return;
+}
+
+// Intentionally leak this to avoid annoying data race issues on thread destruction.
+static Sem* g_dropped_future_sem;
 
 static folly::coro::Task<double> folly_send_to_dropped_future_inner() {
-    {
-        std::unique_lock<std::mutex> guard(g_dropped_future_mutex);
-        g_dropped_future_condvar.wait(guard, [] { return g_dropped_future_dropped; });
-    }
+    g_dropped_future_sem->wait();
     co_return 1.0;
 }
 
 void folly_send_to_dropped_future_go() {
-    std::lock_guard<std::mutex> guard(g_dropped_future_mutex);
-    g_dropped_future_dropped = true;
-    g_dropped_future_condvar.notify_all();
+    g_dropped_future_sem->signal();
 }
 
 rust::Box<RustFutureF64> folly_send_to_dropped_future() {
+    g_dropped_future_sem = new Sem;
     co_return co_await folly_send_to_dropped_future_inner().semi().via(g_thread_pool);
 }

@@ -41,6 +41,9 @@ class FutureVtableProvider {
     static const rust::async::Vtable<Future>* vtable();
 };
 
+template <typename Future>
+using RustResultFor = typename RustFutureTraits<Future>::Result;
+
 // FIXME(pcwalton): Is making these incomplete types the right thing to do? It requires the macro to
 // define drop glue for the `rust::Box` destructor to call, and that's a bit messy.
 template <typename Future>
@@ -48,10 +51,9 @@ class RustSender;
 template <typename Future>
 struct RustOneshot;
 template <typename Future>
+class RustPromiseBase;
+template <typename Future, bool ResultIsVoid>
 class RustPromise;
-
-template <typename Future>
-using RustResultFor = typename RustFutureTraits<Future>::Result;
 
 class SuspendedCoroutine;
 
@@ -186,7 +188,7 @@ class AwaitTransformer {
     AwaitTransformer() = delete;
 
    public:
-    static auto await_transform(RustPromise<Future>& promise, Awaiter&& awaitable) noexcept {
+    static auto await_transform(RustPromiseBase<Future>& promise, Awaiter&& awaitable) noexcept {
         return std::move(awaitable);
     }
 };
@@ -205,12 +207,22 @@ struct RustOneshot {
 };
 
 // A temporary place to hold future results or errors that are sent to or returned from Rust.
-template <typename Future>
+template <typename Result>
 union RustFutureResult {
-    RustResultFor<Future> m_result;
+    Result m_result;
     rust::String m_exception;
 
     // When using this type, you must fill `m_result` or `m_exception` manually via placement new.
+    RustFutureResult() {}
+    // When using this type, you must manually drop the contents.
+    ~RustFutureResult() {}
+};
+
+template <>
+union RustFutureResult<void> {
+    rust::String m_exception;
+
+    // When using this type, you must fill `m_exception` manually via placement new.
     RustFutureResult() {}
     // When using this type, you must manually drop the contents.
     ~RustFutureResult() {}
@@ -222,7 +234,7 @@ class RustFutureReceiver {
 
     std::mutex m_lock;
     rust::Box<Future> m_future;
-    RustFutureResult<Future> m_result;
+    RustFutureResult<RustResultFor<Future>> m_result;
     FuturePollStatus m_status;
 
     RustFutureReceiver(const RustFutureReceiver&) = delete;
@@ -371,19 +383,20 @@ class SuspendedCoroutine {
 // Promise object that manages the oneshot channel that is returned to Rust when Rust calls a C++
 // coroutine.
 template <typename Future>
-class RustPromise {
+class RustPromiseBase {
     typedef RustOneshot<Future> Oneshot;
-    typedef RustResultFor<Future> Result;
 
-    // Don't change the order of these!
+    // This must precede `m_oneshot`.
     Execlet m_execlet;
+
+    RustPromiseBase(const RustPromiseBase&) = delete;
+    RustPromiseBase& operator=(const RustPromiseBase&) = delete;
+
+   protected:
     Oneshot m_oneshot;
 
-    RustPromise(const RustPromise&) = delete;
-    RustPromise& operator=(const RustPromise&) = delete;
-
    public:
-    RustPromise()
+    RustPromiseBase()
         : m_execlet(),
           m_oneshot(FutureVtableProvider<Future>::vtable()->channel(m_execlet.raw())) {}
 
@@ -392,14 +405,6 @@ class RustPromise {
     std::experimental::suspend_never initial_suspend() const noexcept { return {}; }
     std::experimental::suspend_never final_suspend() const noexcept { return {}; }
     std::experimental::coroutine_handle<> unhandled_done() noexcept { return {}; }
-
-    void return_value(Result&& value) {
-        RustFutureResult<Future> result;
-        new (&result.m_result) Result(std::move(value));
-        FutureVtableProvider<Future>::vtable()->sender_send(
-            *m_oneshot.sender, static_cast<uint32_t>(FuturePollStatus::Complete),
-            reinterpret_cast<const uint8_t*>(&result));
-    }
 
     void unhandled_exception() noexcept {
         behavior::TryCatch<Future, behavior::Custom>::trycatch(
@@ -417,6 +422,36 @@ class RustPromise {
     template <typename Awaiter>
     auto await_transform(Awaiter&& awaitable) noexcept {
         return AwaitTransformer<Awaiter, Future>::await_transform(*this, std::move(awaitable));
+    }
+};
+
+template <typename Future, bool ResultIsVoid = std::is_same<RustResultFor<Future>, void>::value>
+class RustPromise final : public RustPromiseBase<Future> {};
+
+// Non-void specialization.
+template <typename Future>
+class RustPromise<Future, false> final : public RustPromiseBase<Future> {
+    typedef RustResultFor<Future> Result;
+
+   public:
+    void return_value(Result&& value) {
+        RustFutureResult<Result> result;
+        new (&result.m_result) Result(std::move(value));
+        FutureVtableProvider<Future>::vtable()->sender_send(
+            *this->m_oneshot.sender, static_cast<uint32_t>(FuturePollStatus::Complete),
+            reinterpret_cast<const uint8_t*>(&result));
+    }
+};
+
+// Void specialization.
+template <typename Future>
+class RustPromise<Future, true> final : public RustPromiseBase<Future> {
+   public:
+    void return_void() {
+        RustFutureResult<void> result;
+        FutureVtableProvider<Future>::vtable()->sender_send(
+            *this->m_oneshot.sender, static_cast<uint32_t>(FuturePollStatus::Complete),
+            reinterpret_cast<const uint8_t*>(&result));
     }
 };
 

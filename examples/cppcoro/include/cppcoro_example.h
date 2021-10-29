@@ -6,6 +6,7 @@
 #include "rust/cxx.h"
 #include "rust/cxx_async.h"
 
+struct RustFutureVoid;
 struct RustFutureF64;
 struct RustFutureString;
 
@@ -55,6 +56,7 @@ rust::Box<foo::bar::RustFutureStringNamespaced> cppcoro_get_namespaced_string();
 rust::Box<RustFutureF64> cppcoro_not_product();
 rust::String cppcoro_call_rust_not_product();
 rust::Box<RustFutureString> cppcoro_ping_pong(int i);
+rust::Box<RustFutureVoid> cppcoro_complete();
 void cppcoro_send_to_dropped_future_go();
 rust::Box<RustFutureF64> cppcoro_send_to_dropped_future();
 
