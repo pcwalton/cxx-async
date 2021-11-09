@@ -24,18 +24,30 @@ extern "C" inline void execlet_run_task(void* task_ptr) {
 
 // Folly-specific interface to execlets.
 class FollyExeclet : public folly::Executor {
+    size_t m_refcount;
     Execlet& m_rust_execlet;
 
     FollyExeclet(const FollyExeclet&) = delete;
     FollyExeclet& operator=(const FollyExeclet&) = delete;
 
    public:
-    FollyExeclet(Execlet& rust_execlet) : m_rust_execlet(rust_execlet) {}
+    FollyExeclet(Execlet& rust_execlet) : m_refcount(0), m_rust_execlet(rust_execlet) {}
     Execlet& rust_execlet() { return m_rust_execlet; }
 
     // Submits a task to the execlet.
     virtual void add(folly::Func task) {
         m_rust_execlet.submit(new folly::Func(std::move(task)), execlet_run_task);
+    }
+
+    virtual bool keepAliveAcquire() noexcept {
+        m_refcount++;
+        return true;
+    }
+
+    virtual void keepAliveRelease() noexcept {
+        m_refcount--;
+        if (m_refcount == 0)
+            delete this;
     }
 };
 
