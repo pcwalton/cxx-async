@@ -9,6 +9,7 @@
 struct RustFutureVoid;
 struct RustFutureF64;
 struct RustFutureString;
+struct RustStreamString;
 
 class MyException : public std::exception {
     const char* m_message;
@@ -59,5 +60,7 @@ rust::Box<RustFutureString> cppcoro_ping_pong(int i);
 rust::Box<RustFutureVoid> cppcoro_complete();
 void cppcoro_send_to_dropped_future_go();
 rust::Box<RustFutureF64> cppcoro_send_to_dropped_future();
+rust::Box<RustStreamString> cppcoro_fizzbuzz();
+rust::Box<RustStreamString> cppcoro_indirect_fizzbuzz();
 
 #endif  // CXX_ASYNC_CPPCORO_EXAMPLE_H

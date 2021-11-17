@@ -22,7 +22,14 @@
 #define CXXASYNC_DEFINE_FUTURE(name, type)       \
     template <>                                  \
     struct rust::async::RustFutureTraits<name> { \
-        typedef type Result;                     \
+        typedef type YieldResult;                \
+        typedef type FinalResult;                \
+    };
+#define CXXASYNC_DEFINE_STREAM(name, type)       \
+    template <>                                  \
+    struct rust::async::RustFutureTraits<name> { \
+        typedef type YieldResult;                \
+        typedef void FinalResult;                \
     };
 
 namespace rust {
@@ -42,17 +49,21 @@ class FutureVtableProvider {
 };
 
 template <typename Future>
-using RustResultFor = typename RustFutureTraits<Future>::Result;
+using RustYieldResultFor = typename RustFutureTraits<Future>::YieldResult;
+template <typename Future>
+using RustFinalResultFor = typename RustFutureTraits<Future>::FinalResult;
+template <typename Future>
+using RustChannelFor = typename RustFutureTraits<Future>::Channel;
 
 // FIXME(pcwalton): Is making these incomplete types the right thing to do? It requires the macro to
 // define drop glue for the `rust::Box` destructor to call, and that's a bit messy.
 template <typename Future>
 class RustSender;
 template <typename Future>
-struct RustOneshot;
+struct RustChannel;
 template <typename Future>
 class RustPromiseBase;
-template <typename Future, bool ResultIsVoid>
+template <typename Future, bool YieldResultIsVoid, bool FinalResultIsVoid>
 class RustPromise;
 
 class SuspendedCoroutine;
@@ -169,6 +180,8 @@ enum class FuturePollStatus {
     Pending,
     Complete,
     Error,
+    // Only used for streams, not futures.
+    Running,
 };
 
 enum class FutureWakeStatus {
@@ -176,6 +189,16 @@ enum class FutureWakeStatus {
     Complete,
     Error,
     Dead,
+};
+
+// The return value of `sender_send`. These must match the `SEND_RESULT_` constants in `lib.rs`.
+enum class RustSendResult {
+    // There's no room to send a value. This task needs to go to sleep.
+    Wait,
+    // The value was successfully sent.
+    Sent,
+    // The value was successfully sent, and the channel is closed.
+    Finished,
 };
 
 inline bool wake_status_is_done(FutureWakeStatus status) {
@@ -195,13 +218,16 @@ class AwaitTransformer {
 
 template <typename Future>
 struct Vtable {
-    RustOneshot<Future> (*channel)(RustExeclet* execlet);
-    void (*sender_send)(RustSender<Future>& self, uint32_t status, const void* value);
+    RustChannel<Future> (*channel)(RustExeclet* execlet);
+    uint32_t (*sender_send)(RustSender<Future>& self,
+                            uint32_t status,
+                            const void* value,
+                            const void* waker_data);
     uint32_t (*future_poll)(Future& self, void* result, const void* waker_data);
 };
 
 template <typename Future>
-struct RustOneshot {
+struct RustChannel {
     rust::Box<Future> future;
     rust::Box<RustSender<Future>> sender;
 };
@@ -230,11 +256,11 @@ union RustFutureResult<void> {
 
 template <typename Future>
 class RustFutureReceiver {
-    typedef RustResultFor<Future> Result;
+    typedef RustYieldResultFor<Future> YieldResult;
 
     std::mutex m_lock;
     rust::Box<Future> m_future;
-    RustFutureResult<RustResultFor<Future>> m_result;
+    RustFutureResult<YieldResult> m_result;
     FuturePollStatus m_status;
 
     RustFutureReceiver(const RustFutureReceiver&) = delete;
@@ -247,7 +273,7 @@ class RustFutureReceiver {
     // Consumes the `coroutine` reference (so you probably want to addref it first).
     FutureWakeStatus wake(SuspendedCoroutine* coroutine);
 
-    Result&& get_result() {
+    YieldResult&& get_result() {
         // Safe to use without taking the lock because the caller asserts that the future has
         // already completed.
         switch (m_status) {
@@ -256,6 +282,8 @@ class RustFutureReceiver {
             case FuturePollStatus::Error:
                 throw Error(m_result.m_exception.c_str());
             case FuturePollStatus::Pending:
+            case FuturePollStatus::Running:
+                // TODO(pcwalton): Handle C++ consuming Rust streams.
                 CXXASYNC_ASSERT(false);
                 std::terminate();
         }
@@ -264,7 +292,7 @@ class RustFutureReceiver {
 
 template <typename Future>
 class RustAwaiter {
-    typedef RustResultFor<Future> Result;
+    typedef RustYieldResultFor<Future> YieldResult;
 
     friend class SuspendedCoroutine;
 
@@ -285,7 +313,31 @@ class RustAwaiter {
 
     bool await_suspend(std::experimental::coroutine_handle<void> next);
 
-    Result&& await_resume() { return m_receiver->get_result(); }
+    YieldResult&& await_resume() { return m_receiver->get_result(); }
+};
+
+template <typename Future>
+class RustStreamAwaiter {
+    typedef RustYieldResultFor<Future> YieldResult;
+
+    friend class SuspendedCoroutine;
+
+    // FIXME(pcwalton): I think this needs to be a `shared_ptr`!
+    RustSender<Future>& m_sender;
+    YieldResult&& m_value;
+
+    FutureWakeStatus poll_next(SuspendedCoroutine* coroutine) noexcept;
+
+    RustStreamAwaiter(const RustStreamAwaiter&) = delete;
+    void operator=(const RustStreamAwaiter&) = delete;
+
+   public:
+    RustStreamAwaiter(RustSender<Future>& sender, YieldResult&& value)
+        : m_sender(sender), m_value(std::move(value)) {}
+
+    bool await_ready() noexcept { return false; }
+    bool await_suspend(std::experimental::coroutine_handle<void> next);
+    void await_resume() {}
 };
 
 // This is like `std::experimental::coroutine_handle<void>`, but it doesn't *have* to be a
@@ -380,27 +432,27 @@ class SuspendedCoroutine {
     }
 };
 
-// Promise object that manages the oneshot channel that is returned to Rust when Rust calls a C++
+// Promise object that manages the channel that is returned to Rust when Rust calls a C++
 // coroutine.
 template <typename Future>
 class RustPromiseBase {
-    typedef RustOneshot<Future> Oneshot;
+    typedef RustChannel<Future> Channel;
 
-    // This must precede `m_oneshot`.
+    // This must precede `m_channel`.
     Execlet m_execlet;
 
     RustPromiseBase(const RustPromiseBase&) = delete;
     RustPromiseBase& operator=(const RustPromiseBase&) = delete;
 
    protected:
-    Oneshot m_oneshot;
+    Channel m_channel;
 
    public:
     RustPromiseBase()
         : m_execlet(),
-          m_oneshot(FutureVtableProvider<Future>::vtable()->channel(m_execlet.raw())) {}
+          m_channel(FutureVtableProvider<Future>::vtable()->channel(m_execlet.raw())) {}
 
-    rust::Box<Future> get_return_object() noexcept { return std::move(m_oneshot.future); }
+    rust::Box<Future> get_return_object() noexcept { return std::move(m_channel.future); }
 
     std::experimental::suspend_never initial_suspend() const noexcept { return {}; }
     std::experimental::suspend_never final_suspend() const noexcept { return {}; }
@@ -411,8 +463,8 @@ class RustPromiseBase {
             []() { std::rethrow_exception(std::current_exception()); },
             [&](const char* what) {
                 const Vtable<Future>* vtable = FutureVtableProvider<Future>::vtable();
-                vtable->sender_send(*m_oneshot.sender,
-                                    static_cast<uint32_t>(FuturePollStatus::Error), what);
+                vtable->sender_send(*m_channel.sender,
+                                    static_cast<uint32_t>(FuturePollStatus::Error), what, nullptr);
             });
     }
 
@@ -425,33 +477,55 @@ class RustPromiseBase {
     }
 };
 
-template <typename Future, bool ResultIsVoid = std::is_same<RustResultFor<Future>, void>::value>
-class RustPromise final : public RustPromiseBase<Future> {};
+// FIXME(pcwalton): Boy, this class hierarchy is ugly.
+template <typename Future, bool YieldResultIsVoid>
+class RustStreamPromiseBase : public RustPromiseBase<Future> {};
 
 // Non-void specialization.
 template <typename Future>
-class RustPromise<Future, false> final : public RustPromiseBase<Future> {
-    typedef RustResultFor<Future> Result;
+class RustStreamPromiseBase<Future, false> : public RustPromiseBase<Future> {
+    typedef RustYieldResultFor<Future> YieldResult;
 
    public:
-    void return_value(Result&& value) {
-        RustFutureResult<Result> result;
-        new (&result.m_result) Result(std::move(value));
-        FutureVtableProvider<Future>::vtable()->sender_send(
-            *this->m_oneshot.sender, static_cast<uint32_t>(FuturePollStatus::Complete),
-            reinterpret_cast<const uint8_t*>(&result));
+    RustStreamAwaiter<Future> yield_value(RustYieldResultFor<Future>&& value) noexcept {
+        return RustStreamAwaiter(*this->m_channel.sender, std::move(value));
     }
 };
 
 // Void specialization.
 template <typename Future>
-class RustPromise<Future, true> final : public RustPromiseBase<Future> {
+class RustStreamPromiseBase<Future, true> : public RustPromiseBase<Future> {};
+
+template <typename Future,
+          bool YieldResultIsVoid = std::is_same<RustYieldResultFor<Future>, void>::value,
+          bool FinalResultIsVoid = std::is_same<RustFinalResultFor<Future>, void>::value>
+class RustPromise final : public RustStreamPromiseBase<Future, YieldResultIsVoid> {};
+
+// Non-void specialization.
+template <typename Future, bool YieldResultIsVoid>
+class RustPromise<Future, YieldResultIsVoid, false> final
+    : public RustStreamPromiseBase<Future, YieldResultIsVoid> {
+    typedef RustFinalResultFor<Future> FinalResult;
+
+   public:
+    void return_value(FinalResult&& value) {
+        RustFutureResult<FinalResult> result;
+        new (&result.m_result) FinalResult(std::move(value));
+        FutureVtableProvider<Future>::vtable()->sender_send(
+            *this->m_channel.sender, static_cast<uint32_t>(FuturePollStatus::Complete),
+            reinterpret_cast<const uint8_t*>(&result), nullptr);
+    }
+};
+
+// Void specialization.
+template <typename Future, bool YieldResultIsVoid>
+class RustPromise<Future, YieldResultIsVoid, true> final
+    : public RustStreamPromiseBase<Future, YieldResultIsVoid> {
    public:
     void return_void() {
-        RustFutureResult<void> result;
         FutureVtableProvider<Future>::vtable()->sender_send(
-            *this->m_oneshot.sender, static_cast<uint32_t>(FuturePollStatus::Complete),
-            reinterpret_cast<const uint8_t*>(&result));
+            *this->m_channel.sender, static_cast<uint32_t>(FuturePollStatus::Complete),
+            nullptr, nullptr);
     }
 };
 
@@ -484,6 +558,38 @@ inline bool RustAwaiter<Future>::await_suspend(std::experimental::coroutine_hand
             return receiver->wake(coroutine->add_ref());
         });
     return coroutine->initial_suspend();
+}
+
+template <typename Future>
+inline bool RustStreamAwaiter<Future>::await_suspend(
+    std::experimental::coroutine_handle<void> next) {
+    SuspendedCoroutine* coroutine = new SuspendedCoroutine(
+        std::make_unique<CoroutineHandleContinuation>(std::move(next)),
+        [=](SuspendedCoroutine* coroutine) { return this->poll_next(coroutine); });
+    return coroutine->initial_suspend();
+}
+
+template <typename Future>
+inline FutureWakeStatus RustStreamAwaiter<Future>::poll_next(
+    SuspendedCoroutine* coroutine) noexcept {
+    RustFutureResult<YieldResult> result;
+    new (&result.m_result) YieldResult(std::move(m_value));
+    RustSendResult send_result =
+        static_cast<RustSendResult>(FutureVtableProvider<Future>::vtable()->sender_send(
+            this->m_sender, static_cast<uint32_t>(FuturePollStatus::Running),
+            reinterpret_cast<const uint8_t*>(&result), coroutine->add_ref()));
+
+    switch (send_result) {
+        case RustSendResult::Sent:
+            return FutureWakeStatus::Complete;
+        case RustSendResult::Wait:
+            m_value = std::move(result.m_result);
+            return FutureWakeStatus::Pending;
+        case RustSendResult::Finished:
+            // Should never get here.
+            CXXASYNC_ASSERT(false);
+            std::terminate();
+    }
 }
 
 }  // namespace async

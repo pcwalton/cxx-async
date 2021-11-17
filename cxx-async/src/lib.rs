@@ -124,9 +124,7 @@
 
 extern crate link_cplusplus;
 
-use futures::channel::oneshot::{
-    self, Canceled, Receiver as OneshotReceiver, Sender as OneshotSender,
-};
+use futures::{Stream, StreamExt};
 use std::collections::VecDeque;
 use std::convert::From;
 use std::error::Error;
@@ -142,8 +140,13 @@ use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
 const FUTURE_STATUS_PENDING: u32 = 0;
 const FUTURE_STATUS_COMPLETE: u32 = 1;
 const FUTURE_STATUS_ERROR: u32 = 2;
+const FUTURE_STATUS_RUNNING: u32 = 3;
 
-pub use cxx_async_macro::bridge_future;
+const SEND_RESULT_WAIT: u32 = 0;
+const SEND_RESULT_SENT: u32 = 1;
+const SEND_RESULT_FINISHED: u32 = 2;
+
+pub use cxx_async_macro::{bridge_future, bridge_stream};
 
 #[doc(hidden)]
 pub use pin_utils::unsafe_pinned;
@@ -197,7 +200,7 @@ impl Error for CxxAsyncException {}
 /// A convenient shorthand for `Result<T, CxxAsyncException>`.
 pub type CxxAsyncResult<T> = Result<T, CxxAsyncException>;
 
-// A table of functions that the `define_cxx_future!` macro emits for the C++ bridge to use.
+// A table of functions that the `bridge_future` macro emits for the C++ bridge to use.
 //
 // This must match the definition in `cxx_async.h`.
 #[repr(C)]
@@ -211,13 +214,13 @@ pub struct CxxAsyncVtable {
 unsafe impl Send for CxxAsyncVtable {}
 unsafe impl Sync for CxxAsyncVtable {}
 
-// A sender/receiver pair for the return value of a wrapped C++ coroutine.
+// A sender/receiver pair for the return value of a wrapped one-shot C++ coroutine.
 //
 // This is an implementation detail and is not exposed to the programmer. It must match the
 // definition in `cxx_async.h`.
 #[repr(C)]
 #[doc(hidden)]
-pub struct CxxAsyncOneshot<Fut, Out>
+pub struct CxxAsyncFutureChannel<Fut, Out>
 where
     Fut: Future<Output = CxxAsyncResult<Out>>,
 {
@@ -225,6 +228,22 @@ where
     future: Box<Fut>,
     // The sending end.
     sender: Box<CxxAsyncSender<Out>>,
+}
+
+// A sender/receiver pair for the return value of a wrapped C++ multi-shot coroutine.
+//
+// This is an implementation detail and is not exposed to the programmer. It must match the
+// definition in `cxx_async.h`.
+#[repr(C)]
+#[doc(hidden)]
+pub struct CxxAsyncStreamChannel<Stm, Item>
+where
+    Stm: Stream<Item = CxxAsyncResult<Item>>,
+{
+    // The receiving end.
+    future: Box<Stm>,
+    // The sending end.
+    sender: Box<CxxAsyncSender<Item>>,
 }
 
 // Allows the Rust polling interface to drive C++ tasks to completion.
@@ -263,7 +282,7 @@ impl Execlet {
     // Runs all tasks in the runqueue to completion.
     fn run(&self, cx: &mut Context) {
         // Lock.
-        let mut guard = self.0.0.lock().unwrap();
+        let mut guard = self.0 .0.lock().unwrap();
         debug_assert!(!guard.running);
         guard.running = true;
 
@@ -277,7 +296,7 @@ impl Execlet {
                 task.run();
             }
             // Re-acquire the lock.
-            guard = self.0.0.lock().unwrap();
+            guard = self.0 .0.lock().unwrap();
         }
 
         // Unlock.
@@ -286,7 +305,7 @@ impl Execlet {
 
     // Submits a task to this execlet.
     fn submit(&self, task: ExecletTask) {
-        let mut this = self.0.0.lock().unwrap();
+        let mut this = self.0 .0.lock().unwrap();
         this.runqueue.push_back(task);
         if !this.running {
             if let Some(ref waker) = this.waker {
@@ -299,6 +318,7 @@ impl Execlet {
     }
 }
 
+// Data for each execlet.
 struct ExecletImpl {
     // Tasks waiting to run.
     runqueue: VecDeque<ExecletTask>,
@@ -310,41 +330,185 @@ struct ExecletImpl {
     running: bool,
 }
 
-// The concrete type of the future that wraps a C++ coroutine.
+// The single-producer/single-consumer channel type that future and stream implementations use to
+// pass values between the two languages.
 //
-// The programmer only interacts with this abstractly behind a `Box<dyn Future>` trait object, so
-// this type is considered an implementation detail. It must be public because the
-// `define_cxx_future!` macro needs to name it.
+// We can't use a `futures::channel::mpsc` channel because it can deadlock. With a standard MPSC
+// channel, if we try to send a value when the buffer is full and the receiving end is woken up and
+// then tries to receive the value, a deadlock occurs, as the MPSC channel doesn't drop locks before
+// calling the waker.
+struct SpscChannel<T>(Arc<Mutex<SpscChannelImpl<T>>>);
+
+// Data for each SPSC channel.
+struct SpscChannelImpl<T> {
+    // The waker waiting on the value.
+    //
+    // This can either be the sending end waiting for the receiving end to receive a previously-sent
+    // value (for streams only) or the receiving end waiting for the sending end to post a value.
+    waiter: Option<Waker>,
+    // The value waiting to be read.
+    value: Option<T>,
+    // True if the channel is closed; false otherwise.
+    closed: bool,
+}
+
+impl<T> SpscChannel<T> {
+    // Creates a new SPSC channel.
+    fn new() -> SpscChannel<T> {
+        SpscChannel(Arc::new(Mutex::new(SpscChannelImpl {
+            waiter: None,
+            value: None,
+            closed: false,
+        })))
+    }
+
+    // Marks the channel as closed. Only the sending end may call this.
+    fn close(&self) {
+        // Drop the lock before possibly calling the waiter because we could deadlock otherwise.
+        let waiter;
+        {
+            let mut this = self.0.lock().unwrap();
+            if this.closed {
+                panic!("Attempted to close an `SpscChannel` that's already closed!")
+            }
+            this.closed = true;
+            waiter = this.waiter.take();
+        }
+
+        if let Some(waiter) = waiter {
+            waiter.wake();
+        }
+    }
+
+    // Attempts to send a value. If this channel already has a value yet to be read, this function
+    // returns false. Otherwise, it calls the provided closure to retrieve the value and returns
+    // true.
+    //
+    // This callback-based design eliminates the requirement to return the original value if the
+    // send fails.
+    fn try_send_with<F>(&self, context: Option<&Context>, getter: F) -> bool
+    where
+        F: FnOnce() -> T,
+    {
+        // Drop the lock before possibly calling the waiter because we could deadlock otherwise.
+        let waiter;
+        {
+            let mut this = self.0.lock().unwrap();
+            if this.value.is_none() {
+                this.value = Some(getter());
+                waiter = this.waiter.take();
+            } else if context.is_some() && this.waiter.is_some() {
+                panic!("Only one task may block on a `SpscChannel`!")
+            } else {
+                if let Some(context) = context {
+                    this.waiter = Some((*context.waker()).clone());
+                }
+                return false;
+            }
+        }
+
+        if let Some(waiter) = waiter {
+            waiter.wake();
+        }
+        true
+    }
+
+    // Attempts to receive a value. Returns `Poll::Pending` if no value is available and the channel
+    // isn't closed. Returns `Poll::Ready(None)` if the channel is closed. Otherwise, receives a
+    // value and returns `Poll::Ready(Some)`.
+    fn recv(&self, cx: &Context) -> Poll<Option<T>> {
+        // Drop the lock before possibly calling the waiter because we could deadlock otherwise.
+        let (value, waiter);
+        {
+            let mut this = self.0.lock().unwrap();
+            match this.value.take() {
+                Some(val) => {
+                    value = val;
+                    waiter = this.waiter.take();
+                }
+                None if this.closed => return Poll::Ready(None),
+                None => {
+                    this.waiter = Some((*cx.waker()).clone());
+                    return Poll::Pending;
+                }
+            }
+        }
+
+        if let Some(waiter) = waiter {
+            waiter.wake();
+        }
+        Poll::Ready(Some(value))
+    }
+}
+
+impl<T> Clone for SpscChannel<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+// The concrete type of the stream that wraps a C++ coroutine, either one-shot (future) or
+// multi-shot (stream).
+//
+// The programmer only interacts with this abstractly behind a `Box<dyn Future>` or
+// `Box<dyn Stream>` trait object, so this type is considered an implementation detail. It must be
+// public because the `bridge_stream` macro needs to name it.
 #[doc(hidden)]
-pub struct CxxAsyncReceiver<Output> {
-    receiver: OneshotReceiver<CxxAsyncResult<Output>>,
+pub struct CxxAsyncReceiver<Item> {
+    // The SPSC channel to receive on.
+    receiver: SpscChannel<CxxAsyncResult<Item>>,
+    // Any execlet that must be driven when receiving.
     execlet: Option<Execlet>,
 }
 
-// The concrete type of the sending end of a future.
+// The concrete type of the sending end of a stream.
 //
-// This must be public because the `define_cxx_future!` macro needs to name it.
+// This must be public because the `bridge_stream` macro needs to name it.
 #[doc(hidden)]
-pub struct CxxAsyncSender<Output>(Option<OneshotSender<CxxAsyncResult<Output>>>);
+pub struct CxxAsyncSender<Item>(Option<SpscChannel<CxxAsyncResult<Item>>>);
 
-impl<Output> Future for CxxAsyncReceiver<Output> {
-    type Output = CxxAsyncResult<Output>;
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+// This is a little weird in that `CxxAsyncReceiver` behaves as a oneshot if it's treated as a
+// Future and an SPSC stream if it's treated as a Stream. But since the programmer only ever
+// interacts with these objects behind boxed trait objects that only expose one of the two traits,
+// it's not a problem.
+impl<Item> Stream for CxxAsyncReceiver<Item>
+where
+    Item: ::std::fmt::Debug,
+{
+    type Item = CxxAsyncResult<Item>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         if let Some(ref execlet) = self.execlet {
             execlet.run(cx);
         }
-        match Future::poll(Pin::new(&mut self.receiver), cx) {
+        self.receiver.recv(cx)
+    }
+}
+
+impl<Output> Future for CxxAsyncReceiver<Output>
+where
+    Output: ::std::fmt::Debug,
+{
+    type Output = CxxAsyncResult<Output>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        if let Some(ref execlet) = self.execlet {
+            execlet.run(cx);
+        }
+        match self.receiver.recv(cx) {
+            Poll::Ready(Some(value)) => Poll::Ready(value),
+            Poll::Ready(None) => {
+                // This should never happen, because a future should never be polled again after
+                // returning `Ready`.
+                panic!("Attempted to use a stream as a future!")
+            }
             Poll::Pending => Poll::Pending,
-            Poll::Ready(Ok(value)) => Poll::Ready(value),
-            Poll::Ready(Err(Canceled)) => Poll::Ready(Err(CxxAsyncException::new(
-                "Canceled".to_owned().into_boxed_str(),
-            ))),
         }
     }
 }
 
-impl<Output> From<OneshotReceiver<CxxAsyncResult<Output>>> for CxxAsyncReceiver<Output> {
-    fn from(receiver: OneshotReceiver<CxxAsyncResult<Output>>) -> Self {
+impl<Item> From<SpscChannel<CxxAsyncResult<Item>>> for CxxAsyncReceiver<Item> {
+    fn from(receiver: SpscChannel<CxxAsyncResult<Item>>) -> Self {
         CxxAsyncReceiver {
             receiver,
             execlet: None,
@@ -387,7 +551,7 @@ unsafe impl Sync for ExecletTask {}
 /// Wraps an arbitrary Rust Future in a boxed `cxx-async` future so that it can be returned to C++.
 ///
 /// You should not need to implement this manually; it's automatically implemented by the
-/// `define_cxx_future!` macro.
+/// `bridge_future` macro.
 pub trait IntoCxxAsyncFuture {
     /// The type of the value yielded by the future.
     type Output;
@@ -410,24 +574,51 @@ pub trait IntoCxxAsyncFuture {
         Fut: Future<Output = CxxAsyncResult<Self::Output>> + Send + 'static;
 }
 
-// Creates a new oneshot sender/receiver pair.
+/// Wraps an arbitrary Rust Stream in a boxed `cxx-async` stream so that it can be returned to C++.
+///
+/// You should not need to implement this manually; it's automatically implemented by the
+/// `bridge_stream` macro.
+pub trait IntoCxxAsyncStream {
+    /// The type of the values yielded by the stream.
+    type Item;
+
+    /// Wraps a Rust Stream that directly yields items of the output type.
+    ///
+    /// Use this when you aren't interested in propagating errors to C++ as exceptions.
+    fn infallible<Stm>(stream: Stm) -> Box<Self>
+    where
+        Stm: Stream<Item = Self::Item> + Send + 'static,
+        Stm::Item: 'static,
+    {
+        Self::fallible(stream.map(Ok))
+    }
+
+    /// Wraps a Rust Stream that yields items of the output type, wrapped in `CxxAsyncResult`s.
+    ///
+    /// Use this when you have error values that you want to turn into exceptions on the C++ side.
+    fn fallible<Stm>(stream: Stm) -> Box<Self>
+    where
+        Stm: Stream<Item = CxxAsyncResult<Self::Item>> + Send + 'static;
+}
+
+// Creates a new oneshot sender/receiver pair for a future.
 //
 // SAFETY: This is a raw FFI function called by our C++ code.
 //
 // This needs an out pointer because of https://github.com/rust-lang/rust-bindgen/issues/778
 #[doc(hidden)]
-pub unsafe extern "C" fn channel<Fut, Out>(
-    out_oneshot: *mut CxxAsyncOneshot<Fut, Out>,
+pub unsafe extern "C" fn future_channel<Fut, Out>(
+    out_oneshot: *mut CxxAsyncFutureChannel<Fut, Out>,
     execlet: *mut RustExeclet,
 ) where
     Fut: From<CxxAsyncReceiver<Out>> + Future<Output = CxxAsyncResult<Out>>,
 {
-    let (sender, receiver) = oneshot::channel();
-    let oneshot = CxxAsyncOneshot {
-        sender: Box::new(CxxAsyncSender(Some(sender))),
+    let channel = SpscChannel::new();
+    let oneshot = CxxAsyncFutureChannel {
+        sender: Box::new(CxxAsyncSender(Some(channel.clone()))),
         future: Box::new(
             CxxAsyncReceiver {
-                receiver,
+                receiver: channel,
                 execlet: Some(Execlet::from_raw_ref(execlet)),
             }
             .into(),
@@ -437,43 +628,141 @@ pub unsafe extern "C" fn channel<Fut, Out>(
     mem::forget(oneshot);
 }
 
-unsafe fn unpack_value_to_send<Output>(status: u32, value: *const u8) -> CxxAsyncResult<Output> {
-    match status {
-        FUTURE_STATUS_COMPLETE => {
-            let mut staging: MaybeUninit<Output> = MaybeUninit::uninit();
-            ptr::copy_nonoverlapping(value as *const Output, staging.as_mut_ptr(), 1);
-            Ok(staging.assume_init())
-        }
-        FUTURE_STATUS_ERROR => {
-            let string = CStr::from_ptr(value as *const i8);
-            Err(CxxAsyncException::new(
-                string.to_string_lossy().into_owned().into_boxed_str(),
-            ))
-        }
-        _ => unreachable!(),
-    }
+// Creates a new multi-shot sender/receiver pair for a stream.
+//
+// SAFETY: This is a raw FFI function called by our C++ code.
+//
+// This needs an out pointer because of https://github.com/rust-lang/rust-bindgen/issues/778
+#[doc(hidden)]
+pub unsafe extern "C" fn stream_channel<Stm, Item>(
+    out_stream: *mut CxxAsyncStreamChannel<Stm, Item>,
+    execlet: *mut RustExeclet,
+) where
+    Stm: From<CxxAsyncReceiver<Item>> + Stream<Item = CxxAsyncResult<Item>>,
+{
+    let channel = SpscChannel::new();
+    let stream = CxxAsyncStreamChannel {
+        sender: Box::new(CxxAsyncSender(Some(channel.clone()))),
+        future: Box::new(
+            CxxAsyncReceiver {
+                receiver: channel,
+                execlet: Some(Execlet::from_raw_ref(execlet)),
+            }
+            .into(),
+        ),
+    };
+    ptr::copy_nonoverlapping(&stream, out_stream, 1);
+    mem::forget(stream);
 }
 
-// C++ calls this to yield a final value.
+// C++ calls this to yield a value for a one-shot coroutine (future).
 //
 // SAFETY: This is a low-level function called by our C++ code.
 //
 // Takes ownership of the value. The caller must not call its destructor.
 //
+// This function always closes the channel and returns `SEND_RESULT_FINISHED`.
+//
+// If `status` is `FUTURE_STATUS_COMPLETE`, then the given value is sent; otherwise, if `status` is
+// `FUTURE_STATUS_ERROR`, `value` must point to an exception string. `FUTURE_STATUS_RUNNING` is
+// illegal, because that value is only for streams, not futures.
+//
+// The `waker_data` parameter should always be null, because a one-shot coroutine should never
+// block on yielding a value.
+//
 // Any errors when sending are dropped on the floor. This is the right behavior because futures
 // can be legally dropped in Rust to signal cancellation.
 #[doc(hidden)]
-pub unsafe extern "C" fn sender_send<Output>(
-    this: &mut CxxAsyncSender<Output>,
+pub unsafe extern "C" fn sender_future_send<Item>(
+    this: &mut CxxAsyncSender<Item>,
     status: u32,
     value: *const u8,
-) {
-    drop(
-        this.0
-            .take()
-            .unwrap()
-            .send(unpack_value_to_send(status, value)),
-    );
+    waker_data: *const u8,
+) -> u32 {
+    debug_assert!(waker_data.is_null());
+
+    let this = this.0.as_mut().expect("Where's the SPSC sender?");
+    let sent = this.try_send_with(None, || match status {
+        FUTURE_STATUS_COMPLETE => Ok(unpack_value::<Item>(value)),
+        FUTURE_STATUS_ERROR => Err(unpack_exception(value)),
+        _ => unreachable!(),
+    });
+
+    debug_assert!(sent);
+    this.close();
+    SEND_RESULT_FINISHED
+}
+
+// C++ calls this to yield a value for a multi-shot coroutine (stream).
+//
+// SAFETY: This is a low-level function called by our C++ code.
+//
+// Takes ownership of the value if and only if it was successfully sent (otherwise, leaves it
+// alone). The caller must not call its destructor on a successful send.
+//
+// This function returns `SEND_RESULT_SENT` if the value was successfully sent, `SEND_RESULT_WAIT`
+// if the value wasn't sent because another value was already in the slot (in which case the task
+// will need to go to sleep), and `SEND_RESULT_FINISHED` if the channel was closed.
+//
+// If `status` is `FUTURE_STATUS_COMPLETE`, then the channel is closed, the value is ignored, and
+// this function immediately returns `SEND_RESULT_FINISHED`. Note that this behavior is different
+// from `sender_future_send`, which actually sends the value if `status` is
+// `FUTURE_STATUS_COMPLETE`.
+//
+// If `waker_data` is present, this identifies the coroutine handle that will be awakened if the
+// channel is currently full.
+//
+// Any errors when sending are dropped on the floor. This is the right behavior because futures
+// can be legally dropped in Rust to signal cancellation.
+#[doc(hidden)]
+pub unsafe extern "C" fn sender_stream_send<Item>(
+    this: &mut CxxAsyncSender<Item>,
+    status: u32,
+    value: *const u8,
+    waker_data: *const u8,
+) -> u32 {
+    let (waker, context);
+    if waker_data.is_null() {
+        context = None;
+    } else {
+        waker = Waker::from_raw(RawWaker::new(
+            waker_data as *const (),
+            &CXXASYNC_WAKER_VTABLE,
+        ));
+        context = Some(Context::from_waker(&waker));
+    }
+
+    let this = this.0.as_mut().expect("Where's the SPSC sender?");
+
+    if status == FUTURE_STATUS_COMPLETE || status == FUTURE_STATUS_ERROR {
+        this.close();
+    }
+    if status == FUTURE_STATUS_COMPLETE {
+        return SEND_RESULT_FINISHED;
+    }
+
+    let sent = this.try_send_with(context.as_ref(), || match status {
+        FUTURE_STATUS_RUNNING => Ok(unpack_value::<Item>(value)),
+        FUTURE_STATUS_ERROR => Err(unpack_exception(value)),
+        _ => unreachable!(),
+    });
+
+    if sent {
+        SEND_RESULT_SENT
+    } else {
+        SEND_RESULT_WAIT
+    }
+}
+
+unsafe fn unpack_value<Output>(value: *const u8) -> Output {
+    let mut staging: MaybeUninit<Output> = MaybeUninit::uninit();
+    ptr::copy_nonoverlapping(value as *const Output, staging.as_mut_ptr(), 1);
+    staging.assume_init()
+}
+
+unsafe fn unpack_exception(value: *const u8) -> CxxAsyncException {
+    let string = CStr::from_ptr(value as *const i8);
+    CxxAsyncException::new(string.to_string_lossy().into_owned().into_boxed_str())
 }
 
 // C++ calls this to poll a wrapped Rust future.

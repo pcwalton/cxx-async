@@ -1,10 +1,13 @@
 // cxx-async/examples/folly/src/main.rs
+//
+//! Demonstrates how to use Folly with `cppcoro`.
 
 use async_recursion::async_recursion;
 use cxx_async::CxxAsyncException;
 use futures::executor::{self, ThreadPool};
 use futures::join;
 use futures::task::SpawnExt;
+use futures::StreamExt;
 use once_cell::sync::Lazy;
 use std::ops::Range;
 
@@ -16,6 +19,7 @@ mod ffi {
         type RustFutureString;
         #[namespace = foo::bar]
         type RustFutureStringNamespaced;
+        type RustStreamString;
         fn rust_dot_product() -> Box<RustFutureF64>;
         fn rust_not_product() -> Box<RustFutureF64>;
         fn rust_folly_ping_pong(i: i32) -> Box<RustFutureString>;
@@ -35,6 +39,8 @@ mod ffi {
         fn folly_complete() -> Box<RustFutureVoid>;
         fn folly_send_to_dropped_future_go();
         fn folly_send_to_dropped_future() -> Box<RustFutureF64>;
+        fn folly_fizzbuzz() -> Box<RustStreamString>;
+        fn folly_indirect_fizzbuzz() -> Box<RustStreamString>;
     }
 }
 
@@ -46,6 +52,8 @@ struct RustFutureF64(f64);
 struct RustFutureString(String);
 #[cxx_async::bridge_future(namespace = foo::bar)]
 struct RustFutureStringNamespaced(String);
+#[cxx_async::bridge_stream]
+struct RustStreamString(String);
 
 const VECTOR_LENGTH: usize = 16384;
 const SPLIT_LIMIT: usize = 32;
@@ -122,13 +130,18 @@ fn rust_folly_ping_pong(i: i32) -> Box<RustFutureString> {
     })
 }
 
-// Tests Rust calling C++ synchronously.
+// Tests Rust calling C++ synchronously using the coroutine API.
 #[test]
-fn test_rust_calling_cpp_synchronously() {
+fn test_rust_calling_cpp_synchronously_coro() {
     assert_eq!(
         executor::block_on(ffi::folly_dot_product_coro()).unwrap(),
         75719554055754070000000.0
     );
+}
+
+// Tests Rust calling C++ synchronously using the Folly future combinator API.
+#[test]
+fn test_rust_calling_cpp_synchronously_futures() {
     assert_eq!(
         executor::block_on(ffi::folly_dot_product_futures()).unwrap(),
         75719554055754070000000.0
@@ -203,6 +216,34 @@ fn test_dropping_futures() {
     ffi::folly_send_to_dropped_future_go();
 }
 
+// Test Rust calling C++ streams.
+#[test]
+fn test_fizzbuzz() {
+    let vector = executor::block_on(
+        ffi::folly_fizzbuzz()
+            .map(|result| result.unwrap())
+            .collect::<Vec<String>>(),
+    );
+    assert_eq!(
+        vector.join(", "),
+        "1, 2, Fizz, 4, Buzz, Fizz, 7, 8, Fizz, Buzz, 11, Fizz, 13, 14, FizzBuzz"
+    );
+}
+
+// Test Rust calling C++ streams that themselves internally await futures.
+#[test]
+fn test_indirect_fizzbuzz() {
+    let vector = executor::block_on(
+        ffi::folly_indirect_fizzbuzz()
+            .map(|result| result.unwrap())
+            .collect::<Vec<String>>(),
+    );
+    assert_eq!(
+        vector.join(", "),
+        "1, 2, Fizz, 4, Buzz, Fizz, 7, 8, Fizz, Buzz, 11, Fizz, 13, 14, FizzBuzz"
+    );
+}
+
 fn main() {
     // Test Rust calling C++ async functions, both synchronously and via a scheduler.
     for fun in &[ffi::folly_dot_product_coro, ffi::folly_dot_product_futures] {
@@ -242,4 +283,18 @@ fn main() {
     // Test dropping futures.
     ffi::folly_send_to_dropped_future();
     ffi::folly_send_to_dropped_future_go();
+
+    // Test Rust calling C++ streams.
+    let vector = executor::block_on(
+        ffi::folly_fizzbuzz()
+            .map(|result| result.unwrap())
+            .collect::<Vec<String>>(),
+    );
+    println!("{}", vector.join(", "));
+    let vector = executor::block_on(
+        ffi::folly_indirect_fizzbuzz()
+            .map(|result| result.unwrap())
+            .collect::<Vec<String>>(),
+    );
+    println!("{}", vector.join(", "));
 }

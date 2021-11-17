@@ -12,6 +12,7 @@
 struct RustFutureVoid;
 struct RustFutureF64;
 struct RustFutureString;
+struct RustStreamString;
 
 class MyException : public std::exception {
     const char* m_message;
@@ -65,5 +66,7 @@ rust::Box<RustFutureString> folly_ping_pong(int i);
 rust::Box<RustFutureVoid> folly_complete();
 void folly_send_to_dropped_future_go();
 rust::Box<RustFutureF64> folly_send_to_dropped_future();
+rust::Box<RustStreamString> folly_fizzbuzz();
+rust::Box<RustStreamString> folly_indirect_fizzbuzz();
 
 #endif  // CXX_ASYNC_FOLLY_EXAMPLE_H

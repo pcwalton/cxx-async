@@ -29,8 +29,9 @@ extern "C" void cxxasync_suspended_coroutine_drop(uint8_t* address) {
 extern "C" void cxxasync_suspended_coroutine_wake_by_ref(uint8_t* ptr) {
     rust::async::SuspendedCoroutine* coroutine =
         reinterpret_cast<rust::async::SuspendedCoroutine*>(ptr);
-    if (wake_status_is_done(coroutine->wake()))
+    if (wake_status_is_done(coroutine->wake())) {
         coroutine->resume();
+    }
 }
 
 extern "C" void cxxasync_suspended_coroutine_wake(uint8_t* ptr) {

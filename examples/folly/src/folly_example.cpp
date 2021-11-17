@@ -41,6 +41,7 @@ CXXASYNC_DEFINE_FUTURE(RustFutureVoid, void);
 CXXASYNC_DEFINE_FUTURE(RustFutureF64, double);
 CXXASYNC_DEFINE_FUTURE(RustFutureString, rust::String);
 CXXASYNC_DEFINE_FUTURE(foo::bar::RustFutureStringNamespaced, rust::String);
+CXXASYNC_DEFINE_STREAM(RustStreamString, rust::String);
 
 const size_t EXAMPLE_SPLIT_LIMIT = 32;
 const size_t EXAMPLE_ARRAY_SIZE = 16384;
@@ -191,4 +192,35 @@ void folly_send_to_dropped_future_go() {
 rust::Box<RustFutureF64> folly_send_to_dropped_future() {
     g_dropped_future_sem = new Sem;
     co_return co_await folly_send_to_dropped_future_inner().semi().via(g_thread_pool);
+}
+
+rust::Box<RustStreamString> folly_fizzbuzz() {
+    for (int i = 1; i <= 15; i++) {
+        if (i % 15 == 0) {
+            co_yield rust::String("FizzBuzz");
+        } else if (i % 5 == 0) {
+            co_yield rust::String("Buzz");
+        } else if (i % 3 == 0) {
+            co_yield rust::String("Fizz");
+        } else {
+            co_yield rust::String(std::to_string(i));
+        }
+    }
+    co_return;
+}
+
+static folly::coro::Task<rust::String> fizzbuzz_inner(int i) {
+    if (i % 15 == 0)
+        co_return rust::String("FizzBuzz");
+    if (i % 5 == 0)
+        co_return rust::String("Buzz");
+    if (i % 3 == 0)
+        co_return rust::String("Fizz");
+    co_return rust::String(std::to_string(i));
+}
+
+rust::Box<RustStreamString> folly_indirect_fizzbuzz() {
+    for (int i = 1; i <= 15; i++)
+        co_yield co_await fizzbuzz_inner(i).semi();
+    co_return;
 }

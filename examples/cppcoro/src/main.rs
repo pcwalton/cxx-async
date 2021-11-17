@@ -2,12 +2,13 @@
 //
 //! Demonstrates how to use `cxx-async` with `cppcoro`.
 
-use async_recursion::async_recursion;
 use crate::ffi::StringNamespaced;
+use async_recursion::async_recursion;
 use cxx_async::CxxAsyncException;
 use futures::executor::{self, ThreadPool};
 use futures::join;
 use futures::task::SpawnExt;
+use futures::StreamExt;
 use once_cell::sync::Lazy;
 use std::ops::Range;
 
@@ -24,6 +25,7 @@ mod ffi {
         type RustFutureString;
         #[namespace = foo::bar]
         type RustFutureStringNamespaced;
+        type RustStreamString;
         fn rust_dot_product() -> Box<RustFutureF64>;
         fn rust_not_product() -> Box<RustFutureF64>;
         fn rust_cppcoro_ping_pong(i: i32) -> Box<RustFutureString>;
@@ -42,6 +44,8 @@ mod ffi {
         fn cppcoro_complete() -> Box<RustFutureVoid>;
         fn cppcoro_send_to_dropped_future_go();
         fn cppcoro_send_to_dropped_future() -> Box<RustFutureF64>;
+        fn cppcoro_fizzbuzz() -> Box<RustStreamString>;
+        fn cppcoro_indirect_fizzbuzz() -> Box<RustStreamString>;
     }
 }
 
@@ -53,6 +57,8 @@ struct RustFutureF64(f64);
 struct RustFutureString(String);
 #[cxx_async::bridge_future(namespace = foo::bar)]
 struct RustFutureStringNamespaced(StringNamespaced);
+#[cxx_async::bridge_stream]
+struct RustStreamString(String);
 
 const VECTOR_LENGTH: usize = 16384;
 const SPLIT_LIMIT: usize = 32;
@@ -200,12 +206,39 @@ fn test_complete() {
     executor::block_on(ffi::cppcoro_complete()).unwrap();
 }
 
-
 // Test dropping futures.
 #[test]
 fn test_dropping_futures() {
     ffi::cppcoro_send_to_dropped_future();
     ffi::cppcoro_send_to_dropped_future_go();
+}
+
+// Test Rust calling C++ streams.
+#[test]
+fn test_fizzbuzz() {
+    let vector = executor::block_on(
+        ffi::cppcoro_fizzbuzz()
+            .map(|result| result.unwrap())
+            .collect::<Vec<String>>(),
+    );
+    assert_eq!(
+        vector.join(", "),
+        "1, 2, Fizz, 4, Buzz, Fizz, 7, 8, Fizz, Buzz, 11, Fizz, 13, 14, FizzBuzz"
+    );
+}
+
+// Test Rust calling C++ streams that themselves internally await futures.
+#[test]
+fn test_indirect_fizzbuzz() {
+    let vector = executor::block_on(
+        ffi::cppcoro_indirect_fizzbuzz()
+            .map(|result| result.unwrap())
+            .collect::<Vec<String>>(),
+    );
+    assert_eq!(
+        vector.join(", "),
+        "1, 2, Fizz, 4, Buzz, Fizz, 7, 8, Fizz, Buzz, 11, Fizz, 13, 14, FizzBuzz"
+    );
 }
 
 fn main() {
@@ -245,4 +278,18 @@ fn main() {
     // Test dropping futures.
     ffi::cppcoro_send_to_dropped_future();
     ffi::cppcoro_send_to_dropped_future_go();
+
+    // Test Rust calling C++ streams.
+    let vector = executor::block_on(
+        ffi::cppcoro_fizzbuzz()
+            .map(|result| result.unwrap())
+            .collect::<Vec<String>>(),
+    );
+    println!("{}", vector.join(", "));
+    let vector = executor::block_on(
+        ffi::cppcoro_indirect_fizzbuzz()
+            .map(|result| result.unwrap())
+            .collect::<Vec<String>>(),
+    );
+    println!("{}", vector.join(", "));
 }
