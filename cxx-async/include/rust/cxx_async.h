@@ -206,14 +206,27 @@ inline bool wake_status_is_done(FutureWakeStatus status) {
 }
 
 // Downstream libraries can customize this by adding template specializations.
-template <typename Awaiter, typename Future>
+//
+// A specialization should look like this:
+//
+//      template <typename Awaiter, typename Future>
+//      class AwaitTransformer<Awaiter, Future, std::void_t</* something to SFINAE */>> {
+//          AwaitTransformer() = delete;
+//
+//         public:
+//          static auto await_transform(RustPromiseBase<Future>& promise, Awaiter&& awaiter)
+//                  noexcept {
+//              // Transform `co_await` however you'd like.
+//          }
+//      };
+//
+// See `cxx_async_folly.h` for an example.
+template <typename Awaiter, typename Future, typename = void>
 class AwaitTransformer {
     AwaitTransformer() = delete;
 
    public:
-    static auto await_transform(RustPromiseBase<Future>& promise, Awaiter&& awaitable) noexcept {
-        return std::move(awaitable);
-    }
+    typedef bool CantTransform;
 };
 
 template <typename Future>
@@ -470,10 +483,19 @@ class RustPromiseBase {
 
     Execlet& execlet() noexcept { return m_execlet; }
 
-    // Customization point for library integration (e.g. folly).
-    template <typename Awaiter>
+    // Customization point for library integration (e.g. Folly).
+    template <typename Awaiter,
+              decltype(AwaitTransformer<Awaiter, Future>::await_transform(
+                  *static_cast<RustPromiseBase<Future>*>(nullptr),
+                  std::move(*static_cast<Awaiter*>(nullptr))))* = nullptr>
     auto await_transform(Awaiter&& awaitable) noexcept {
-        return AwaitTransformer<Awaiter, Future>::await_transform(*this, std::move(awaitable));
+        return AwaitTransformer<Awaiter, Future>::await_transform(*this,
+                                                                  std::forward<Awaiter>(awaitable));
+    }
+    // Default implementation of the above if the library doesn't need to customize `co_await`.
+    template <typename Awaiter, typename AwaitTransformer<Awaiter, Future>::CantTransform = true>
+    auto&& await_transform(Awaiter&& awaitable) noexcept {
+        return std::forward<Awaiter>(awaitable);
     }
 };
 
@@ -524,8 +546,8 @@ class RustPromise<Future, YieldResultIsVoid, true> final
    public:
     void return_void() {
         FutureVtableProvider<Future>::vtable()->sender_send(
-            *this->m_channel.sender, static_cast<uint32_t>(FuturePollStatus::Complete),
-            nullptr, nullptr);
+            *this->m_channel.sender, static_cast<uint32_t>(FuturePollStatus::Complete), nullptr,
+            nullptr);
     }
 };
 

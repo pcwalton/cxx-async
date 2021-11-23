@@ -10,6 +10,7 @@
 #include <folly/experimental/coro/ViaIfAsync.h>
 #include <mutex>
 #include <queue>
+#include <type_traits>
 #include "rust/cxx_async.h"
 
 namespace rust {
@@ -51,16 +52,18 @@ class FollyExeclet : public folly::Executor {
     }
 };
 
-// Allows Folly semifutures (which can be retrieved from Folly tasks via the `semi()` method) to be
-// awaited.
-template <typename Result, typename Future>
-class AwaitTransformer<folly::SemiFuture<Result>, Future> {
+// Allows Folly semi-awaitables (including Folly tasks) to be awaited.
+template <typename SemiAwaitable, typename Future>
+class AwaitTransformer<SemiAwaitable,
+                       Future,
+                       std::void_t<folly::coro::semi_await_result_t<SemiAwaitable>()>> {
     AwaitTransformer() = delete;
 
    public:
     static auto await_transform(RustPromiseBase<Future>& promise,
-                                folly::SemiFuture<Result>&& semifuture) noexcept {
-        return std::move(semifuture).via(new FollyExeclet(promise.execlet()));
+                                SemiAwaitable&& semiawaitable) noexcept {
+        return folly::coro::co_viaIfAsync(new FollyExeclet(promise.execlet()),
+                                          std::move(semiawaitable));
     }
 };
 
