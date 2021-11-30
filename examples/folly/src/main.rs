@@ -5,9 +5,9 @@
 use async_recursion::async_recursion;
 use cxx_async::CxxAsyncException;
 use futures::executor::{self, ThreadPool};
-use futures::join;
 use futures::task::SpawnExt;
 use futures::StreamExt;
+use futures::{join, TryStreamExt};
 use once_cell::sync::Lazy;
 use std::ops::Range;
 
@@ -41,6 +41,7 @@ mod ffi {
         fn folly_send_to_dropped_future() -> Box<RustFutureF64>;
         fn folly_fizzbuzz() -> Box<RustStreamString>;
         fn folly_indirect_fizzbuzz() -> Box<RustStreamString>;
+        fn folly_not_fizzbuzz() -> Box<RustStreamString>;
     }
 }
 
@@ -244,6 +245,21 @@ fn test_indirect_fizzbuzz() {
     );
 }
 
+#[test]
+fn test_streams_throwing_exceptions() {
+    let mut vector = executor::block_on(
+        ffi::folly_not_fizzbuzz()
+            .map_err(|err| err.what().to_owned())
+            .collect::<Vec<Result<String, String>>>(),
+    );
+    assert_eq!(vector.pop().unwrap(), Err("kablam".to_owned()));
+    let strings: Vec<String> = vector.into_iter().map(Result::unwrap).collect();
+    assert_eq!(
+        strings.join(", "),
+        "1, 2, Fizz, 4, Buzz, Fizz, 7, 8, Fizz, Buzz"
+    );
+}
+
 fn main() {
     // Test Rust calling C++ async functions, both synchronously and via a scheduler.
     for fun in &[ffi::folly_dot_product_coro, ffi::folly_dot_product_futures] {
@@ -294,6 +310,14 @@ fn main() {
     let vector = executor::block_on(
         ffi::folly_indirect_fizzbuzz()
             .map(|result| result.unwrap())
+            .collect::<Vec<String>>(),
+    );
+    println!("{}", vector.join(", "));
+
+    // Test Rust calling C++ streams that throw exceptions partway through.
+    let vector = executor::block_on(
+        ffi::folly_not_fizzbuzz()
+            .map(|result| format!("{:?}", result))
             .collect::<Vec<String>>(),
     );
     println!("{}", vector.join(", "));

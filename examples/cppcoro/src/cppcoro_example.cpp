@@ -159,3 +159,9 @@ rust::Box<RustStreamString> cppcoro_indirect_fizzbuzz() {
         co_yield co_await fizzbuzz_inner(i);
     co_return;
 }
+
+rust::Box<RustStreamString> cppcoro_not_fizzbuzz() {
+    for (int i = 1; i <= 10; i++)
+        co_yield co_await fizzbuzz_inner(i);
+    throw MyException("kablam");
+}

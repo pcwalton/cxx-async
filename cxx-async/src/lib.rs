@@ -348,6 +348,8 @@ struct SpscChannelImpl<T> {
     waiter: Option<Waker>,
     // The value waiting to be read.
     value: Option<T>,
+    // An exception from the C++ side that is to be delivered over to the Rust side.
+    exception: Option<CxxAsyncException>,
     // True if the channel is closed; false otherwise.
     closed: bool,
 }
@@ -358,6 +360,7 @@ impl<T> SpscChannel<T> {
         SpscChannel(Arc::new(Mutex::new(SpscChannelImpl {
             waiter: None,
             value: None,
+            exception: None,
             closed: false,
         })))
     }
@@ -386,7 +389,7 @@ impl<T> SpscChannel<T> {
     //
     // This callback-based design eliminates the requirement to return the original value if the
     // send fails.
-    fn try_send_with<F>(&self, context: Option<&Context>, getter: F) -> bool
+    fn try_send_value_with<F>(&self, context: Option<&Context>, getter: F) -> bool
     where
         F: FnOnce() -> T,
     {
@@ -413,31 +416,53 @@ impl<T> SpscChannel<T> {
         true
     }
 
+    // Raises an exception. This is synchronous and thus should never fail. It must only be called
+    // once, or not at all, for a given `SpscSender`.
+    fn send_exception(&self, exception: CxxAsyncException) {
+        // Drop the lock before possibly calling the waiter because we could deadlock otherwise.
+        let waiter = {
+            let mut this = self.0.lock().unwrap();
+            debug_assert!(this.exception.is_none());
+            this.exception = Some(exception);
+            this.waiter.take()
+        };
+
+        if let Some(waiter) = waiter {
+            waiter.wake();
+        }
+    }
+
     // Attempts to receive a value. Returns `Poll::Pending` if no value is available and the channel
     // isn't closed. Returns `Poll::Ready(None)` if the channel is closed. Otherwise, receives a
     // value and returns `Poll::Ready(Some)`.
-    fn recv(&self, cx: &Context) -> Poll<Option<T>> {
+    fn recv(&self, cx: &Context) -> Poll<Option<CxxAsyncResult<T>>> {
         // Drop the lock before possibly calling the waiter because we could deadlock otherwise.
-        let (value, waiter);
+        let (result, waiter);
         {
             let mut this = self.0.lock().unwrap();
             match this.value.take() {
-                Some(val) => {
-                    value = val;
+                Some(value) => {
+                    result = Ok(value);
                     waiter = this.waiter.take();
                 }
-                None if this.closed => return Poll::Ready(None),
-                None => {
-                    this.waiter = Some((*cx.waker()).clone());
-                    return Poll::Pending;
-                }
+                None => match this.exception.take() {
+                    Some(exception) => {
+                        result = Err(exception);
+                        waiter = this.waiter.take();
+                    }
+                    None if this.closed => return Poll::Ready(None),
+                    None => {
+                        this.waiter = Some((*cx.waker()).clone());
+                        return Poll::Pending;
+                    }
+                },
             }
         }
 
         if let Some(waiter) = waiter {
             waiter.wake();
         }
-        Poll::Ready(Some(value))
+        Poll::Ready(Some(result))
     }
 }
 
@@ -456,7 +481,7 @@ impl<T> Clone for SpscChannel<T> {
 #[doc(hidden)]
 pub struct CxxAsyncReceiver<Item> {
     // The SPSC channel to receive on.
-    receiver: SpscChannel<CxxAsyncResult<Item>>,
+    receiver: SpscChannel<Item>,
     // Any execlet that must be driven when receiving.
     execlet: Option<Execlet>,
 }
@@ -465,7 +490,7 @@ pub struct CxxAsyncReceiver<Item> {
 //
 // This must be public because the `bridge_stream` macro needs to name it.
 #[doc(hidden)]
-pub struct CxxAsyncSender<Item>(Option<SpscChannel<CxxAsyncResult<Item>>>);
+pub struct CxxAsyncSender<Item>(Option<SpscChannel<Item>>);
 
 // This is a little weird in that `CxxAsyncReceiver` behaves as a oneshot if it's treated as a
 // Future and an SPSC stream if it's treated as a Stream. But since the programmer only ever
@@ -496,7 +521,8 @@ where
             execlet.run(cx);
         }
         match self.receiver.recv(cx) {
-            Poll::Ready(Some(value)) => Poll::Ready(value),
+            Poll::Ready(Some(Ok(value))) => Poll::Ready(Ok(value)),
+            Poll::Ready(Some(Err(exception))) => Poll::Ready(Err(exception)),
             Poll::Ready(None) => {
                 // This should never happen, because a future should never be polled again after
                 // returning `Ready`.
@@ -507,8 +533,8 @@ where
     }
 }
 
-impl<Item> From<SpscChannel<CxxAsyncResult<Item>>> for CxxAsyncReceiver<Item> {
-    fn from(receiver: SpscChannel<CxxAsyncResult<Item>>) -> Self {
+impl<Item> From<SpscChannel<Item>> for CxxAsyncReceiver<Item> {
+    fn from(receiver: SpscChannel<Item>) -> Self {
         CxxAsyncReceiver {
             receiver,
             execlet: None,
@@ -682,13 +708,16 @@ pub unsafe extern "C" fn sender_future_send<Item>(
     debug_assert!(waker_data.is_null());
 
     let this = this.0.as_mut().expect("Where's the SPSC sender?");
-    let sent = this.try_send_with(None, || match status {
-        FUTURE_STATUS_COMPLETE => Ok(unpack_value::<Item>(value)),
-        FUTURE_STATUS_ERROR => Err(unpack_exception(value)),
+    match status {
+        FUTURE_STATUS_COMPLETE => {
+            // This is a one-shot sender, so sending must always succeed.
+            let sent = this.try_send_value_with(None, || unpack_value::<Item>(value));
+            debug_assert!(sent);
+        }
+        FUTURE_STATUS_ERROR => this.send_exception(unpack_exception(value)),
         _ => unreachable!(),
-    });
+    }
 
-    debug_assert!(sent);
     this.close();
     SEND_RESULT_FINISHED
 }
@@ -733,24 +762,25 @@ pub unsafe extern "C" fn sender_stream_send<Item>(
     }
 
     let this = this.0.as_mut().expect("Where's the SPSC sender?");
-
-    if status == FUTURE_STATUS_COMPLETE || status == FUTURE_STATUS_ERROR {
-        this.close();
-    }
-    if status == FUTURE_STATUS_COMPLETE {
-        return SEND_RESULT_FINISHED;
-    }
-
-    let sent = this.try_send_with(context.as_ref(), || match status {
-        FUTURE_STATUS_RUNNING => Ok(unpack_value::<Item>(value)),
-        FUTURE_STATUS_ERROR => Err(unpack_exception(value)),
+    match status {
+        FUTURE_STATUS_COMPLETE => {
+            this.close();
+            SEND_RESULT_FINISHED
+        }
+        FUTURE_STATUS_RUNNING => {
+            let sent = this.try_send_value_with(context.as_ref(), || unpack_value::<Item>(value));
+            if sent {
+                SEND_RESULT_SENT
+            } else {
+                SEND_RESULT_WAIT
+            }
+        }
+        FUTURE_STATUS_ERROR => {
+            this.send_exception(unpack_exception(value));
+            this.close();
+            SEND_RESULT_FINISHED
+        }
         _ => unreachable!(),
-    });
-
-    if sent {
-        SEND_RESULT_SENT
-    } else {
-        SEND_RESULT_WAIT
     }
 }
 

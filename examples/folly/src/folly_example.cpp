@@ -224,3 +224,9 @@ rust::Box<RustStreamString> folly_indirect_fizzbuzz() {
         co_yield co_await fizzbuzz_inner(i).semi();
     co_return;
 }
+
+rust::Box<RustStreamString> folly_not_fizzbuzz() {
+    for (int i = 1; i <= 10; i++)
+        co_yield co_await fizzbuzz_inner(i);
+    throw MyException("kablam");
+}

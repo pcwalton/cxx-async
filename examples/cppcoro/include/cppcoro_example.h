@@ -62,5 +62,6 @@ void cppcoro_send_to_dropped_future_go();
 rust::Box<RustFutureF64> cppcoro_send_to_dropped_future();
 rust::Box<RustStreamString> cppcoro_fizzbuzz();
 rust::Box<RustStreamString> cppcoro_indirect_fizzbuzz();
+rust::Box<RustStreamString> cppcoro_not_fizzbuzz();
 
 #endif  // CXX_ASYNC_CPPCORO_EXAMPLE_H
