@@ -487,7 +487,7 @@ class RustPromiseBase {
     template <typename Awaiter,
               decltype(AwaitTransformer<Awaiter, Future>::await_transform(
                   *static_cast<RustPromiseBase<Future>*>(nullptr),
-                  std::move(*static_cast<Awaiter*>(nullptr))))* = nullptr>
+                  std::declval<Awaiter>()))* = nullptr>
     auto await_transform(Awaiter&& awaitable) noexcept {
         return AwaitTransformer<Awaiter, Future>::await_transform(*this,
                                                                   std::forward<Awaiter>(awaitable));

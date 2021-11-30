@@ -62,8 +62,8 @@ class AwaitTransformer<SemiAwaitable,
    public:
     static auto await_transform(RustPromiseBase<Future>& promise,
                                 SemiAwaitable&& semiawaitable) noexcept {
-        return folly::coro::co_viaIfAsync(new FollyExeclet(promise.execlet()),
-                                          std::move(semiawaitable));
+        return std::move(folly::coro::co_viaIfAsync(new FollyExeclet(promise.execlet()),
+                                                    std::forward<SemiAwaitable>(semiawaitable)));
     }
 };
 
