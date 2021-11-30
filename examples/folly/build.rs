@@ -2,7 +2,7 @@
 
 use pkg_config::Config;
 use shlex::Shlex;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::str::FromStr;
 
@@ -82,10 +82,25 @@ fn main() {
         .output()
         .expect("Failed to execute `pkg-config` to find Folly!");
     let output = String::from_utf8(output.stdout).expect("`pkg-config --libs` wasn't UTF-8!");
-    let mut include_dirs = vec![];
+
+    let (mut include_dirs, mut other_cflags) = (vec![], vec![]);
     for arg in output.split_whitespace() {
         if let Some(rest) = arg.strip_prefix("-I") {
-            include_dirs.push(rest.to_owned());
+            let path = Path::new(rest);
+            if path.starts_with("/Library/Developer/CommandLineTools/SDKs")
+                && path.ends_with("usr/include")
+            {
+                // Change any attempt to specify system headers from `-I` to `-isysroot`. `-I` is
+                // not the proper way to include a system header and will cause compilation failures
+                // on macOS Catalina.
+                //
+                // Pop off the trailing `usr/include`.
+                let sysroot = path.parent().unwrap().parent().unwrap();
+                other_cflags.push("-isysroot".to_owned());
+                other_cflags.push(sysroot.to_string_lossy().into_owned());
+            } else {
+                include_dirs.push(path.to_owned());
+            }
         }
     }
 
@@ -93,11 +108,15 @@ fn main() {
     println!("cargo:rerun-if-changed=include/folly_example.h");
     println!("cargo:rerun-if-changed=src/folly_example.cpp");
 
-    cxx_build::bridge("src/main.rs")
+    let mut build = cxx_build::bridge("src/main.rs");
+    build
         .file("src/folly_example.cpp")
         .include("include")
         .include("../common/include")
         .include("../../cxx-async/include")
-        .includes(&include_dirs)
-        .compile("folly_example");
+        .includes(&include_dirs);
+    for other_cflag in other_cflags {
+        build.flag(&other_cflag);
+    }
+    build.compile("folly_example");
 }
