@@ -496,10 +496,7 @@ pub struct CxxAsyncSender<Item>(Option<SpscChannel<Item>>);
 // Future and an SPSC stream if it's treated as a Stream. But since the programmer only ever
 // interacts with these objects behind boxed trait objects that only expose one of the two traits,
 // it's not a problem.
-impl<Item> Stream for CxxAsyncReceiver<Item>
-where
-    Item: ::std::fmt::Debug,
-{
+impl<Item> Stream for CxxAsyncReceiver<Item> {
     type Item = CxxAsyncResult<Item>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -510,10 +507,7 @@ where
     }
 }
 
-impl<Output> Future for CxxAsyncReceiver<Output>
-where
-    Output: ::std::fmt::Debug,
-{
+impl<Output> Future for CxxAsyncReceiver<Output> {
     type Output = CxxAsyncResult<Output>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
