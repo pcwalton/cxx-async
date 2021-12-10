@@ -15,9 +15,11 @@
 #include <folly/experimental/coro/Task.h>
 #include <folly/experimental/coro/ViaIfAsync.h>
 #include <folly/experimental/coro/WithAsyncStack.h>
+#include <folly/futures/Barrier.h>
 #include <folly/futures/Future-inl.h>
 #include <folly/futures/Future.h>
 #include <folly/futures/Promise-inl.h>
+#include <folly/synchronization/Baton.h>
 #include <folly/tracing/AsyncStack-inl.h>
 #include <cstdlib>
 #include <exception>
@@ -229,4 +231,39 @@ rust::Box<RustStreamString> folly_not_fizzbuzz() {
     for (int i = 1; i <= 10; i++)
         co_yield co_await fizzbuzz_inner(i);
     throw MyException("kablam");
+}
+
+struct DestructorTest {
+    folly::futures::Barrier m_barrier;
+    folly::Baton<> m_baton;
+
+    DestructorTest() : m_barrier(1), m_baton() {}
+};
+
+static DestructorTest g_destructor_test;
+
+// Ensure that coroutines run to completion, calling destructors as they do. This function,
+// `folly_drop_coroutine_wait()` is called first, and the resulting future is dropped. Then
+// `folly_drop_coroutine_signal()` is called and should return.
+rust::Box<RustFutureVoid> folly_drop_coroutine_wait() {
+    struct SignalOnDestruction {
+        ~SignalOnDestruction() {
+            g_destructor_test.m_baton.post();
+        }
+    };
+
+    SignalOnDestruction signaller;
+    // This makes the coroutine hang until `folly_drop_coroutine_signal()` is called.
+    co_await g_destructor_test.m_barrier.wait();
+    co_return;
+}
+
+rust::Box<RustFutureVoid> folly_drop_coroutine_signal() {
+    // Signal `folly_drop_coroutine_wait()`, which should be running in the background, reparented
+    // to the reaper.
+    co_await g_destructor_test.m_barrier.wait();
+    // Wait for `folly_drop_coroutine_wait()` to finish. The baton is signaled in the destructor of
+    // an object on that coroutine's stack.
+    g_destructor_test.m_baton.wait();
+    co_return;
 }

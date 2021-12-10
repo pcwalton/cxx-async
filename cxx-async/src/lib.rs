@@ -125,6 +125,7 @@
 extern crate link_cplusplus;
 
 use futures::{Stream, StreamExt};
+use once_cell::sync::OnceCell;
 use std::collections::VecDeque;
 use std::convert::From;
 use std::error::Error;
@@ -133,9 +134,9 @@ use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::future::Future;
 use std::mem::{self, MaybeUninit};
 use std::pin::Pin;
-use std::ptr;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex, Weak};
 use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
+use std::{ptr, thread};
 
 const FUTURE_STATUS_PENDING: u32 = 0;
 const FUTURE_STATUS_COMPLETE: u32 = 1;
@@ -253,6 +254,8 @@ where
 #[doc(hidden)]
 pub struct Execlet(Arc<RustExeclet>);
 
+struct WeakExeclet(Weak<RustExeclet>);
+
 // The type that C++ sees for an execlet. This is opaque as far as C++ is concerned.
 #[doc(hidden)]
 pub struct RustExeclet(Mutex<ExecletImpl>);
@@ -265,6 +268,10 @@ impl Execlet {
             waker: None,
             running: false,
         }))))
+    }
+
+    fn downgrade(&self) -> WeakExeclet {
+        WeakExeclet(Arc::downgrade(&self.0))
     }
 
     // Consumes the reference.
@@ -329,6 +336,152 @@ struct ExecletImpl {
     // from recursive invocations.
     running: bool,
 }
+
+struct ExecletReaper {
+    execlets: Mutex<ExecletReaperQueue>,
+    cond: Condvar,
+}
+
+struct ExecletReaperQueue {
+    new: Vec<WeakExeclet>,
+    old: Vec<Execlet>,
+}
+
+impl ExecletReaper {
+    fn get() -> Arc<ExecletReaper> {
+        static INSTANCE: OnceCell<Arc<ExecletReaper>> = OnceCell::new();
+        (*INSTANCE.get_or_init(|| {
+            let reaper = Arc::new(ExecletReaper {
+                execlets: Mutex::new(ExecletReaperQueue {
+                    new: vec![],
+                    old: vec![],
+                }),
+                cond: Condvar::new(),
+            });
+            let reaper_ = reaper.clone();
+            thread::spawn(move || ExecletReaper::run(reaper_));
+            reaper
+        }))
+        .clone()
+    }
+
+    fn add(&self, execlet: Execlet) {
+        let mut execlets = self.execlets.lock().unwrap();
+        execlets.new.push(execlet.downgrade());
+
+        // Go ahead and start running the execlet if the reaper is sleeping. This makes sure that
+        // we properly handle the following sequence of events:
+        //
+        // 1. User code drops the `CxxAsyncReceiver` from a task T and `CxxAsyncReceiver::drop()`
+        //    starts running, but doesn't get here yet.
+        // 2. The wrapped C++ future resolves on some C++ executor on another thread and submits a
+        //    task U to the execlet.
+        // 3. The original Waker is invoked and the Rust executor makes a note to resume task T.
+        //    Because T is already running and has dropped the receiver, this does *not* cause the
+        //    execlet to run.
+        // 4. We add the execlet to this reaper.
+        //
+        // In this case, we have to make sure that we run task U, even though an execlet reaper
+        // waker was never invoked.
+        self.cond.notify_all();
+    }
+
+    fn run(self: Arc<Self>) {
+        loop {
+            let mut execlets = self.execlets.lock().unwrap();
+            while execlets.is_empty() {
+                execlets = self.cond.wait(execlets).unwrap();
+            }
+
+            let execlets_to_process = execlets.take();
+            for execlet in execlets_to_process {
+                drop(execlets);
+                unsafe {
+                    execlet.run(&mut Context::from_waker(&Waker::from_raw(
+                        ExecletReaperWaker {
+                            execlet: execlet.clone(),
+                        }
+                        .into_raw(),
+                    )));
+                }
+                execlets = self.execlets.lock().unwrap();
+                execlets.old.push(execlet);
+            }
+        }
+    }
+
+    fn wake(&self) {
+        self.cond.notify_all();
+    }
+}
+
+impl ExecletReaperQueue {
+    fn is_empty(&self) -> bool {
+        self.new.is_empty() && self.old.is_empty()
+    }
+
+    fn take(&mut self) -> Vec<Execlet> {
+        let mut execlets = mem::replace(&mut self.old, vec![]);
+        for execlet in mem::replace(&mut self.new, vec![]).into_iter() {
+            if let Some(execlet) = execlet.0.upgrade() {
+                execlets.push(Execlet(execlet));
+            }
+        }
+        execlets
+    }
+}
+
+#[derive(Clone)]
+struct ExecletReaperWaker {
+    execlet: Execlet,
+}
+
+impl ExecletReaperWaker {
+    unsafe fn from_raw(data: *const ()) -> ExecletReaperWaker {
+        ExecletReaperWaker {
+            execlet: Execlet(Arc::from_raw(data as *const RustExeclet)),
+        }
+    }
+
+    fn into_raw(self) -> RawWaker {
+        RawWaker::new(
+            Arc::into_raw(self.execlet.0) as *const (),
+            &EXECLET_REAPER_WAKER_VTABLE,
+        )
+    }
+
+    fn wake(self) {
+        ExecletReaper::get().wake();
+    }
+}
+
+unsafe fn execlet_reaper_waker_clone(data: *const ()) -> RawWaker {
+    let execlet_reaper_waker = ExecletReaperWaker::from_raw(data);
+    let waker = execlet_reaper_waker.clone().into_raw();
+    mem::forget(execlet_reaper_waker);
+    waker
+}
+
+unsafe fn execlet_reaper_waker_wake(data: *const ()) {
+    ExecletReaperWaker::from_raw(data).wake()
+}
+
+unsafe fn execlet_reaper_waker_wake_by_ref(data: *const ()) {
+    let waker = ExecletReaperWaker::from_raw(data);
+    waker.clone().wake();
+    mem::forget(waker);
+}
+
+unsafe fn execlet_reaper_waker_drop(data: *const ()) {
+    drop(ExecletReaperWaker::from_raw(data))
+}
+
+static EXECLET_REAPER_WAKER_VTABLE: RawWakerVTable = RawWakerVTable::new(
+    execlet_reaper_waker_clone,
+    execlet_reaper_waker_wake,
+    execlet_reaper_waker_wake_by_ref,
+    execlet_reaper_waker_drop,
+);
 
 // The single-producer/single-consumer channel type that future and stream implementations use to
 // pass values between the two languages.
@@ -533,6 +686,20 @@ impl<Item> From<SpscChannel<Item>> for CxxAsyncReceiver<Item> {
             receiver,
             execlet: None,
         }
+    }
+}
+
+impl<Item> Drop for CxxAsyncReceiver<Item> {
+    fn drop(&mut self) {
+        let execlet = match self.execlet {
+            Some(ref execlet) => execlet,
+            None => return,
+        };
+        let receiver = self.receiver.0.lock().unwrap();
+        if receiver.closed {
+            return;
+        }
+        ExecletReaper::get().add((*execlet).clone());
     }
 }
 

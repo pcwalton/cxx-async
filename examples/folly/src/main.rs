@@ -42,6 +42,8 @@ mod ffi {
         fn folly_fizzbuzz() -> Box<RustStreamString>;
         fn folly_indirect_fizzbuzz() -> Box<RustStreamString>;
         fn folly_not_fizzbuzz() -> Box<RustStreamString>;
+        fn folly_drop_coroutine_wait() -> Box<RustFutureVoid>;
+        fn folly_drop_coroutine_signal() -> Box<RustFutureVoid>;
     }
 }
 
@@ -260,6 +262,13 @@ fn test_streams_throwing_exceptions() {
     );
 }
 
+#[test]
+fn test_dropping_coroutines() {
+    // Make sure that coroutines get parented to the reaper so that destructors are called.
+    let _ = ffi::folly_drop_coroutine_wait();
+    drop(executor::block_on(ffi::folly_drop_coroutine_signal()));
+}
+
 fn main() {
     // Test Rust calling C++ async functions, both synchronously and via a scheduler.
     for fun in &[ffi::folly_dot_product_coro, ffi::folly_dot_product_futures] {
@@ -321,4 +330,8 @@ fn main() {
             .collect::<Vec<String>>(),
     );
     println!("{}", vector.join(", "));
+
+    // Test that destructors are called when dropping a future.
+    let _ = ffi::folly_drop_coroutine_wait();
+    drop(executor::block_on(ffi::folly_drop_coroutine_signal()));
 }

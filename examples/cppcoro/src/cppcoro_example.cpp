@@ -4,6 +4,7 @@
 
 #include "cppcoro_example.h"
 #include <condition_variable>
+#include <cppcoro/async_latch.hpp>
 #include <cppcoro/fmap.hpp>
 #include <cppcoro/schedule_on.hpp>
 #include <cppcoro/static_thread_pool.hpp>
@@ -15,6 +16,7 @@
 #include <experimental/coroutine>
 #include <functional>
 #include <iosfwd>
+#include <iostream>
 #include <mutex>
 #include <new>
 #include <stdexcept>
@@ -164,4 +166,39 @@ rust::Box<RustStreamString> cppcoro_not_fizzbuzz() {
     for (int i = 1; i <= 10; i++)
         co_yield co_await fizzbuzz_inner(i);
     throw MyException("kablam");
+}
+
+struct DestructorTest {
+    cppcoro::async_latch m_latch;
+    Sem m_sem;
+
+    DestructorTest() : m_latch(1), m_sem() {}
+};
+
+static DestructorTest g_destructor_test;
+
+// Ensure that coroutines run to completion, calling destructors as they do. This function,
+// `cppcoro_drop_coroutine_wait()` is called first, and the resulting future is dropped. Then
+// `cppcoro_drop_coroutine_signal()` is called and should return.
+rust::Box<RustFutureVoid> cppcoro_drop_coroutine_wait() {
+    struct SignalOnDestruction {
+        ~SignalOnDestruction() {
+            g_destructor_test.m_sem.signal();
+        }
+    };
+
+    SignalOnDestruction signaller;
+    // This makes the coroutine hang until `cppcoro_drop_coroutine_signal()` is called.
+    co_await g_destructor_test.m_latch;
+    co_return;
+}
+
+rust::Box<RustFutureVoid> cppcoro_drop_coroutine_signal() {
+    // Signal `cppcoro_drop_coroutine_wait()`, which should be running in the background, reparented
+    // to the reaper.
+    g_destructor_test.m_latch.count_down();
+    // Wait for `cppcoro_drop_coroutine_wait()` to finish. The baton is signaled in the destructor
+    // of an object on that coroutine's stack.
+    g_destructor_test.m_sem.wait();
+    co_return;
 }

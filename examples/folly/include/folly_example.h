@@ -69,5 +69,7 @@ rust::Box<RustFutureF64> folly_send_to_dropped_future();
 rust::Box<RustStreamString> folly_fizzbuzz();
 rust::Box<RustStreamString> folly_indirect_fizzbuzz();
 rust::Box<RustStreamString> folly_not_fizzbuzz();
+rust::Box<RustFutureVoid> folly_drop_coroutine_wait();
+rust::Box<RustFutureVoid> folly_drop_coroutine_signal();
 
 #endif  // CXX_ASYNC_FOLLY_EXAMPLE_H
