@@ -1,3 +1,12 @@
+/*
+ * Copyright (c) Facebook, Inc. and its affiliates.
+ *
+ * This source code is licensed under both the MIT license found in the
+ * LICENSE-MIT file in the root directory of this source tree and the Apache
+ * License, Version 2.0 found in the LICENSE-APACHE file in the root directory
+ * of this source tree.
+ */
+
 // cxx-async/include/rust/cxx_async.h
 
 #ifndef RUST_CXX_ASYNC_H
@@ -76,13 +85,14 @@ class Error final : public std::exception {
   void copy_from(const char* message) {
     size_t len = std::strlen(message) + 1;
     m_message = new char[len];
-    std::memcpy(reinterpret_cast<void*>(m_message), message, len);
+    std::copy(&message[0], &message[len], m_message);
   }
   void destroy() {
-    if (m_message != nullptr)
+    if (m_message != nullptr) {
       delete[] m_message;
+    }
   }
-  Error(const char* message) {
+  explicit Error(const char* message) {
     copy_from(message);
   }
   template <typename Future>
@@ -92,7 +102,7 @@ class Error final : public std::exception {
   Error(const Error& other) {
     copy_from(other.m_message);
   }
-  Error(Error&& other) : m_message(other.m_message) {
+  Error(Error&& other) noexcept : m_message(other.m_message) {
     other.m_message = nullptr;
   }
   ~Error() noexcept override {
@@ -249,7 +259,7 @@ class AwaitTransformer {
   AwaitTransformer() = delete;
 
  public:
-  typedef bool CantTransform;
+  using CantTransform = bool;
 };
 
 template <typename Future>
@@ -296,7 +306,7 @@ union RustFutureResult<void> {
 
 template <typename Future>
 class RustFutureReceiver {
-  typedef RustYieldResultFor<Future> YieldResult;
+  using YieldResult = typedef RustYieldResultFor<Future>;
 
   std::mutex m_lock;
   rust::Box<Future> m_future;
@@ -307,7 +317,7 @@ class RustFutureReceiver {
   void operator=(const RustFutureReceiver&) = delete;
 
  public:
-  RustFutureReceiver(rust::Box<Future>&& future)
+  explicit RustFutureReceiver(rust::Box<Future>&& future)
       : m_lock(),
         m_future(std::move(future)),
         m_status(FuturePollStatus::Pending) {}
@@ -335,7 +345,7 @@ class RustFutureReceiver {
 
 template <typename Future>
 class RustAwaiter {
-  typedef RustYieldResultFor<Future> YieldResult;
+  using YieldResult = RustYieldResultFor<Future>;
 
   friend class SuspendedCoroutine;
 
@@ -345,7 +355,7 @@ class RustAwaiter {
   void operator=(const RustAwaiter&) = delete;
 
  public:
-  RustAwaiter(rust::Box<Future>&& future)
+  explicit RustAwaiter(rust::Box<Future>&& future)
       : m_receiver(
             std::make_shared<RustFutureReceiver<Future>>(std::move(future))) {}
 
@@ -364,7 +374,7 @@ class RustAwaiter {
 
 template <typename Future>
 class RustStreamAwaiter {
-  typedef RustYieldResultFor<Future> YieldResult;
+  using YieldResult = RustYieldResultFor<Future>;
 
   friend class SuspendedCoroutine;
 
@@ -407,12 +417,12 @@ class CoroutineHandleContinuation : public Continuation {
   std::experimental::coroutine_handle<void> m_next;
 
  public:
-  CoroutineHandleContinuation(std::experimental::coroutine_handle<void>&& next)
+  explicit CoroutineHandleContinuation(std::experimental::coroutine_handle<void>&& next)
       : m_next(next) {}
-  virtual void resume() {
+  void resume() override {
     m_next.resume();
   }
-  virtual void destroy() {
+  void destroy() override {
     m_next.destroy();
   }
 };
@@ -455,8 +465,9 @@ class SuspendedCoroutine {
   void release() {
     uintptr_t last_refcount = m_refcount.fetch_sub(1);
     CXXASYNC_ASSERT(last_refcount > 0);
-    if (last_refcount == 1)
+    if (last_refcount == 1) {
       delete this;
+    }
   }
 
   // Does not consume the `this` reference.
@@ -475,8 +486,9 @@ class SuspendedCoroutine {
     // means we won't resume, so unless we intervene like this nothing will stop
     // our destructor from destroying the coroutine handle.
     bool done = wake_status_is_done(status);
-    if (done)
+    if (done) {
       forget_coroutine_handle();
+    }
     release();
     return !done;
   }
@@ -493,7 +505,7 @@ class SuspendedCoroutine {
 // calls a C++ coroutine.
 template <typename Future>
 class RustPromiseBase {
-  typedef RustChannel<Future> Channel;
+  using Channel = RustChannel<Future>;
 
   // This must precede `m_channel`.
   Execlet m_execlet;
@@ -568,7 +580,7 @@ class RustStreamPromiseBase : public RustPromiseBase<Future> {};
 // Non-void specialization.
 template <typename Future>
 class RustStreamPromiseBase<Future, false> : public RustPromiseBase<Future> {
-  typedef RustYieldResultFor<Future> YieldResult;
+  using YieldResult = RustYieldResultFor<Future>;
 
  public:
   RustStreamAwaiter<Future> yield_value(
@@ -594,7 +606,7 @@ class RustPromise final
 template <typename Future, bool YieldResultIsVoid>
 class RustPromise<Future, YieldResultIsVoid, false> final
     : public RustStreamPromiseBase<Future, YieldResultIsVoid> {
-  typedef RustFinalResultFor<Future> FinalResult;
+  using FinalResult = RustFinalResultFor<Future>;
 
  public:
   void return_value(FinalResult&& value) {
@@ -651,8 +663,9 @@ inline bool RustAwaiter<Future>::await_suspend(
         std::shared_ptr<RustFutureReceiver<Future>> receiver =
             weak_receiver.lock();
         // This rarely ever happens in practice, but I think it can.
-        if (!receiver)
+        if (!receiver) {
           return FutureWakeStatus::Dead;
+        }
         return receiver->wake(coroutine->add_ref());
       });
   return coroutine->initial_suspend();
