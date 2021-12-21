@@ -12,43 +12,45 @@ struct RustFutureString;
 struct RustStreamString;
 
 class MyException : public std::exception {
-    const char* m_message;
+  const char* m_message;
 
-   public:
-    MyException(const char* message) : m_message(message) {}
-    const char* message() const noexcept { return m_message; }
+ public:
+  MyException(const char* message) : m_message(message) {}
+  const char* message() const noexcept {
+    return m_message;
+  }
 };
 
 namespace rust {
 namespace async {
 namespace behavior {
 
-template<typename T>
+template <typename T>
 struct TryCatch<T, Custom> {
-    template <typename Try, typename Fail>
-    static void trycatch(Try&& func, Fail&& fail) noexcept {
-        try {
-            func();
-        } catch (const MyException& exception) {
-            fail(exception.message());
-        } catch (const std::exception& exception) {
-            // Should never get here.
-            std::terminate();
-        }
+  template <typename Try, typename Fail>
+  static void trycatch(Try&& func, Fail&& fail) noexcept {
+    try {
+      func();
+    } catch (const MyException& exception) {
+      fail(exception.message());
+    } catch (const std::exception& exception) {
+      // Should never get here.
+      std::terminate();
     }
+  }
 };
 
-}  // namespace behavior
-}  // namespace async
-}  // namespace rust
+} // namespace behavior
+} // namespace async
+} // namespace rust
 
 namespace foo {
 namespace bar {
 
 struct RustFutureStringNamespaced;
 
-}  // namespace bar
-}  // namespace foo
+} // namespace bar
+} // namespace foo
 
 rust::Box<RustFutureF64> cppcoro_dot_product();
 double cppcoro_call_rust_dot_product();
@@ -66,4 +68,4 @@ rust::Box<RustStreamString> cppcoro_not_fizzbuzz();
 rust::Box<RustFutureVoid> cppcoro_drop_coroutine_wait();
 rust::Box<RustFutureVoid> cppcoro_drop_coroutine_signal();
 
-#endif  // CXX_ASYNC_CPPCORO_EXAMPLE_H
+#endif // CXX_ASYNC_CPPCORO_EXAMPLE_H

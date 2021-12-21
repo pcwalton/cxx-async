@@ -5,49 +5,51 @@
 
 #include <cstdint>
 
-// Simple PRNG that can be easily duplicated on the Rust and C++ sides to ensure identical output.
+// Simple PRNG that can be easily duplicated on the Rust and C++ sides to ensure
+// identical output.
 class Xorshift {
-    uint32_t m_state;
-    Xorshift(Xorshift&) = delete;
-    void operator=(Xorshift) = delete;
+  uint32_t m_state;
+  Xorshift(Xorshift&) = delete;
+  void operator=(Xorshift) = delete;
 
-   public:
-    // Random, but constant, seed.
-    Xorshift() : m_state(0x243f6a88) {}
+ public:
+  // Random, but constant, seed.
+  Xorshift() : m_state(0x243f6a88) {}
 
-    inline uint32_t next() {
-        uint32_t x = m_state;
-        x ^= x << 13;
-        x ^= x >> 17;
-        x ^= x << 5;
-        m_state = x;
-        return x;
-    }
+  inline uint32_t next() {
+    uint32_t x = m_state;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    m_state = x;
+    return x;
+  }
 };
 
-// Can't use a C++ `std::binary_semaphore` here because Apple doesn't support it.
+// Can't use a C++ `std::binary_semaphore` here because Apple doesn't support
+// it.
 class Sem {
-    unsigned m_value;
-    std::condition_variable m_cond;
-    std::mutex m_mutex;
+  unsigned m_value;
+  std::condition_variable m_cond;
+  std::mutex m_mutex;
 
-    Sem(const Sem&) = delete;
-    Sem& operator=(const Sem&) = delete;
+  Sem(const Sem&) = delete;
+  Sem& operator=(const Sem&) = delete;
 
-   public:
-    Sem() : m_value(0) {}
+ public:
+  Sem() : m_value(0) {}
 
-    void wait() {
-        std::unique_lock<std::mutex> guard(m_mutex);
-        m_cond.wait(guard, [&] { return m_value > 0; });
-        m_value--;
-    }
+  void wait() {
+    std::unique_lock<std::mutex> guard(m_mutex);
+    m_cond.wait(guard, [&] { return m_value > 0; });
+    m_value--;
+  }
 
-    void signal() {
-        std::unique_lock<std::mutex> guard(m_mutex);
-        m_value++;
-        m_cond.notify_one();
-    }
+  void signal() {
+    std::unique_lock<std::mutex> guard(m_mutex);
+    m_value++;
+    m_cond.notify_one();
+  }
 };
 
-#endif  // CXX_ASYNC_EXAMPLE_H
+#endif // CXX_ASYNC_EXAMPLE_H

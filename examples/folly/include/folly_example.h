@@ -3,11 +3,11 @@
 #ifndef CXX_ASYNC_FOLLY_EXAMPLE_H
 #define CXX_ASYNC_FOLLY_EXAMPLE_H
 
+#include <folly/ExceptionWrapper.h>
+#include <exception>
+#include <iostream>
 #include "rust/cxx.h"
 #include "rust/cxx_async.h"
-#include <exception>
-#include <folly/ExceptionWrapper.h>
-#include <iostream>
 
 struct RustFutureVoid;
 struct RustFutureF64;
@@ -15,37 +15,39 @@ struct RustFutureString;
 struct RustStreamString;
 
 class MyException : public std::exception {
-    const char* m_message;
+  const char* m_message;
 
-   public:
-    MyException(const char* message) : m_message(message) {}
-    const char* message() const noexcept { return m_message; }
+ public:
+  MyException(const char* message) : m_message(message) {}
+  const char* message() const noexcept {
+    return m_message;
+  }
 };
 
 namespace rust {
 namespace async {
 namespace behavior {
 
-template<typename T>
+template <typename T>
 struct TryCatch<T, Custom> {
-    template <typename Try, typename Fail>
-    static void trycatch(Try&& func, Fail&& fail) noexcept {
-        try {
-            func();
-        } catch (const MyException& exception) {
-            fail(exception.message());
-        } catch (const async::Error& exception) {
-            fail(exception.what());
-        } catch (const std::exception& exception) {
-            // Should never get here.
-            std::terminate();
-        }
+  template <typename Try, typename Fail>
+  static void trycatch(Try&& func, Fail&& fail) noexcept {
+    try {
+      func();
+    } catch (const MyException& exception) {
+      fail(exception.message());
+    } catch (const async::Error& exception) {
+      fail(exception.what());
+    } catch (const std::exception& exception) {
+      // Should never get here.
+      std::terminate();
     }
+  }
 };
 
-}  // namespace behavior
-}  // namespace async
-}  // namespace rust
+} // namespace behavior
+} // namespace async
+} // namespace rust
 
 namespace foo {
 namespace bar {
@@ -53,7 +55,7 @@ namespace bar {
 struct RustFutureStringNamespaced;
 
 }
-}  // namespace foo
+} // namespace foo
 
 rust::Box<RustFutureF64> folly_dot_product_coro();
 rust::Box<RustFutureF64> folly_dot_product_futures();
@@ -72,4 +74,4 @@ rust::Box<RustStreamString> folly_not_fizzbuzz();
 rust::Box<RustFutureVoid> folly_drop_coroutine_wait();
 rust::Box<RustFutureVoid> folly_drop_coroutine_signal();
 
-#endif  // CXX_ASYNC_FOLLY_EXAMPLE_H
+#endif // CXX_ASYNC_FOLLY_EXAMPLE_H

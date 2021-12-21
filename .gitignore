@@ -1,6 +1,7 @@
 /target
 .vscode
 *.code-workspace
+.clang-format
 
 # Not `.cargo/config.toml`. If you want your own personal config, you can
 # `cp .cargo/config.toml .cargo/config`. (Cargo prefers the version without the `.toml` extension.)

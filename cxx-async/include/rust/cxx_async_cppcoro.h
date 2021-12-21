@@ -5,4 +5,4 @@
 
 // This file intentionally left blank.
 
-#endif  // RUST_CXX_ASYNC_CPPCORO_H
+#endif // RUST_CXX_ASYNC_CPPCORO_H
