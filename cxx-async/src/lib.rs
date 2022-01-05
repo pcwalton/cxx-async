@@ -1,3 +1,12 @@
+/*
+ * Copyright (c) Meta Platforms, Inc. and its affiliates.
+ *
+ * This source code is licensed under both the MIT license found in the
+ * LICENSE-MIT file in the root directory of this source tree and the Apache
+ * License, Version 2.0 found in the LICENSE-APACHE file in the root directory
+ * of this source tree.
+ */
+
 // cxx-async/src/main.rs
 //
 //! `cxx-async` is a Rust crate that extends the [`cxx`](http://cxx.rs/) library to provide
@@ -289,7 +298,7 @@ impl Execlet {
     // Runs all tasks in the runqueue to completion.
     fn run(&self, cx: &mut Context) {
         // Lock.
-        let mut guard = self.0 .0.lock().unwrap();
+        let mut guard = self.0.0.lock().unwrap();
         debug_assert!(!guard.running);
         guard.running = true;
 
@@ -303,7 +312,7 @@ impl Execlet {
                 task.run();
             }
             // Re-acquire the lock.
-            guard = self.0 .0.lock().unwrap();
+            guard = self.0.0.lock().unwrap();
         }
 
         // Unlock.

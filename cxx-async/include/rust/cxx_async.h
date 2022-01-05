@@ -1,5 +1,5 @@
 /*
- * Copyright (c) Facebook, Inc. and its affiliates.
+ * Copyright (c) Meta Platforms, Inc. and its affiliates.
  *
  * This source code is licensed under both the MIT license found in the
  * LICENSE-MIT file in the root directory of this source tree and the Apache
@@ -306,7 +306,7 @@ union RustFutureResult<void> {
 
 template <typename Future>
 class RustFutureReceiver {
-  using YieldResult = typedef RustYieldResultFor<Future>;
+  using YieldResult = RustYieldResultFor<Future>;
 
   std::mutex m_lock;
   rust::Box<Future> m_future;
@@ -436,7 +436,7 @@ class SuspendedCoroutine {
   SuspendedCoroutine(const SuspendedCoroutine&) = delete;
   void operator=(const SuspendedCoroutine&) = delete;
 
-  typedef std::function<FutureWakeStatus(SuspendedCoroutine*)> WakeFn;
+  using WakeFn = std::function<FutureWakeStatus(SuspendedCoroutine*)>;
 
   std::atomic<uintptr_t> m_refcount;
   std::unique_ptr<Continuation> m_next;

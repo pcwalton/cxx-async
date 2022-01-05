@@ -6,7 +6,7 @@
 interoperability between asynchronous Rust code using `async`/`await` and [C++20 coroutines] using
 `co_await`. If your C++ code is asynchronous, `cxx-async` can provide a more convenient, and
 potentially more efficient, alternative to callbacks. You can freely convert between C++ coroutines
-and Rust futures and await one from the other.
+and Rust futures and/or streams and await one from the other.
 
 It's important to emphasize what `cxx-async` isn't: it isn't a C++ binding to Tokio or any other
 Rust I/O library. Nor is it a Rust binding to `boost::asio` or similar. Such bindings could in
@@ -118,7 +118,8 @@ cppcoro::task<rust::String> call_rust() {
 }
 ```
 
-That's it! You should now be able to freely await futures on either side.
+That's it! You should now be able to freely await futures on either side. An analogous procedure can
+be followed to wrap C++ coroutines that yield values with `co_yield` in Rust streams.
 
 ## Installation notes
 
