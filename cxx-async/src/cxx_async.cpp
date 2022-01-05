@@ -19,8 +19,9 @@ namespace rust {
 namespace async {
 
 void cxxasync_assert(bool cond) {
-  if (!cond)
+  if (!cond) {
     abort();
+  }
 }
 
 } // namespace async

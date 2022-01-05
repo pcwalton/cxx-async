@@ -8,7 +8,7 @@ use cxx_async::CxxAsyncException;
 use futures::executor::{self, ThreadPool};
 use futures::task::SpawnExt;
 use futures::StreamExt;
-use futures::{join, TryStreamExt};
+use futures::join;
 use once_cell::sync::Lazy;
 use std::ops::Range;
 

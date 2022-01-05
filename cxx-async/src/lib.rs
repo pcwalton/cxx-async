@@ -430,8 +430,8 @@ impl ExecletReaperQueue {
     }
 
     fn take(&mut self) -> Vec<Execlet> {
-        let mut execlets = mem::replace(&mut self.old, vec![]);
-        for execlet in mem::replace(&mut self.new, vec![]).into_iter() {
+        let mut execlets = mem::take(&mut self.old);
+        for execlet in mem::take(&mut self.new).into_iter() {
             if let Some(execlet) = execlet.0.upgrade() {
                 execlets.push(Execlet(execlet));
             }
