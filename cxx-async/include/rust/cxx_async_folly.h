@@ -17,6 +17,7 @@
 #include <folly/executors/ManualExecutor.h>
 #include <folly/experimental/coro/Task.h>
 #include <folly/experimental/coro/ViaIfAsync.h>
+#include <atomic>
 #include <mutex>
 #include <queue>
 #include <type_traits>
@@ -35,7 +36,7 @@ extern "C" inline void execlet_run_task(void* task_ptr) {
 
 // Folly-specific interface to execlets.
 class FollyExeclet : public folly::Executor {
-  size_t m_refcount;
+  std::atomic_size_t m_refcount;
   Execlet& m_rust_execlet;
 
   FollyExeclet(const FollyExeclet&) = delete;
@@ -59,8 +60,7 @@ class FollyExeclet : public folly::Executor {
   }
 
   virtual void keepAliveRelease() noexcept {
-    m_refcount--;
-    if (m_refcount == 0)
+    if (m_refcount.fetch_sub(1) == 1)
       delete this;
   }
 };
