@@ -1067,3 +1067,11 @@ pub unsafe extern "C" fn cxxasync_execlet_submit(
 ) {
     Execlet::from_raw_ref(this).submit(ExecletTask::new(run, task_data))
 }
+
+// Reexports for the `#[bridge_future]` and `#[bridge_stream]` macros to use internally. Users of
+// this crate shouldn't use these; they should import the `futures` crate directly.
+#[doc(hidden)]
+pub mod private {
+    pub use futures::future::BoxFuture;
+    pub use futures::stream::{BoxStream, Stream};
+}

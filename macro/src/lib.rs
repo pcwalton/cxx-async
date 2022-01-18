@@ -65,7 +65,7 @@ pub fn bridge_future(attribute: TokenStream, item: TokenStream) -> TokenStream {
             // FIXME(pcwalton): Unfortunately, as far as I can tell this has to be double-boxed
             // because we have to return these by value and we need the `CxxAsyncReceiver`
             // type to be Sized.
-            future: ::futures::future::BoxFuture<'static, ::cxx_async::CxxAsyncResult<#output>>,
+            future: ::cxx_async::private::BoxFuture<'static, ::cxx_async::CxxAsyncResult<#output>>,
         }
 
         impl #future {
@@ -74,7 +74,7 @@ pub fn bridge_future(attribute: TokenStream, item: TokenStream) -> TokenStream {
             // move the field).
             // 2. The struct doesn't implement Unpin.
             // 3. The struct isn't `repr(packed)`.
-            ::cxx_async::unsafe_pinned!(future: ::futures::future::BoxFuture<'static,
+            ::cxx_async::unsafe_pinned!(future: ::cxx_async::private::BoxFuture<'static,
                 ::cxx_async::CxxAsyncResult<#output>>);
         }
 
@@ -193,7 +193,7 @@ pub fn bridge_stream(attribute: TokenStream, item: TokenStream) -> TokenStream {
             // FIXME(pcwalton): Unfortunately, as far as I can tell this has to be double-boxed
             // because we have to return these by value and we need the `CxxAsyncReceiver` type
             // to be Sized.
-            stream: ::futures::stream::BoxStream<'static, ::cxx_async::CxxAsyncResult<#item>>,
+            stream: ::cxx_async::private::BoxStream<'static, ::cxx_async::CxxAsyncResult<#item>>,
         }
 
         impl #stream {
@@ -202,14 +202,14 @@ pub fn bridge_stream(attribute: TokenStream, item: TokenStream) -> TokenStream {
             // move the field).
             // 2. The struct doesn't implement Unpin.
             // 3. The struct isn't `repr(packed)`.
-            ::cxx_async::unsafe_pinned!(stream: ::futures::stream::BoxStream<'static,
+            ::cxx_async::unsafe_pinned!(stream: ::cxx_async::private::BoxStream<'static,
                 ::cxx_async::CxxAsyncResult<#item>>);
         }
 
         // Define how to box up a future.
         impl ::cxx_async::IntoCxxAsyncStream for #stream {
             type Item = #item;
-            fn fallible<Stm>(stream: Stm) -> Box<Self> where Stm: ::futures::stream::Stream<Item =
+            fn fallible<Stm>(stream: Stm) -> Box<Self> where Stm: ::cxx_async::private::Stream<Item =
                     ::cxx_async::CxxAsyncResult<#item>> + Send + 'static {
                 Box::new(#stream {
                     stream: Box::pin(stream),
@@ -218,7 +218,7 @@ pub fn bridge_stream(attribute: TokenStream, item: TokenStream) -> TokenStream {
         }
 
         // Implement the Rust Stream trait.
-        impl ::futures::stream::Stream for #stream {
+        impl ::cxx_async::private::Stream for #stream {
             type Item = ::cxx_async::CxxAsyncResult<#item>;
             fn poll_next(mut self: ::std::pin::Pin<&mut Self>, cx: &mut ::std::task::Context<'_>)
                     -> ::std::task::Poll<Option<Self::Item>> {
@@ -238,12 +238,12 @@ pub fn bridge_stream(attribute: TokenStream, item: TokenStream) -> TokenStream {
         // Convenience wrappers so that client code doesn't have to import `IntoCxxAsyncFuture`.
         impl #stream {
             pub fn infallible<Stm>(stream: Stm) -> Box<Self>
-                    where Stm: ::futures::stream::Stream<Item = #item> + Send + 'static {
+                    where Stm: ::cxx_async::private::Stream<Item = #item> + Send + 'static {
                 <#stream as ::cxx_async::IntoCxxAsyncStream>::infallible(stream)
             }
 
             pub fn fallible<Stm>(stream: Stm) -> Box<Self>
-                    where Stm: ::futures::stream::Stream<Item =
+                    where Stm: ::cxx_async::private::Stream<Item =
                         ::cxx_async::CxxAsyncResult<#item>> + Send + 'static {
                 <#stream as ::cxx_async::IntoCxxAsyncStream>::fallible(stream)
             }
