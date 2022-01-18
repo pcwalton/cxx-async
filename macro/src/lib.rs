@@ -14,12 +14,13 @@
 //! Don't depend on this crate directly; just use the reexported macro in `cxx-async`.
 
 use bitvec::prelude::{bitvec, Lsb0};
-use proc_macro::{Spacing, TokenStream, TokenTree};
+use proc_macro::TokenStream;
 use quote::quote;
 use std::collections::HashMap;
 use std::fmt::Write;
 use std::iter;
-use syn::{Fields, Ident, ItemStruct, Type};
+use syn::parse::{Parse, ParseStream, Result as ParseResult};
+use syn::{Fields, Ident, ItemStruct, Path, Token, Type};
 
 /// Defines a future type that can be awaited from both Rust and C++.
 ///
@@ -293,7 +294,10 @@ struct AstPieces {
 impl AstPieces {
     // Parses the macro arguments and returns the pieces, panicking on error.
     fn from_token_streams(attribute: TokenStream, item: TokenStream) -> AstPieces {
-        let namespace = parse_namespace_attribute(attribute);
+        let namespace: NamespaceAttribute = match syn::parse(attribute) {
+            Ok(namespace) => namespace,
+            Err(_) => panic!("expected possible namespace attribute"),
+        };
 
         let struct_item: ItemStruct = match syn::parse(item) {
             Ok(struct_item) => struct_item,
@@ -313,11 +317,11 @@ impl AstPieces {
         let future_name_string = format!("{}", future);
 
         let drop_sender_glue = Ident::new(
-            &mangle_drop_glue("RustSender", &future_name_string, &namespace),
+            &mangle_drop_glue("RustSender", &future_name_string, &namespace.0),
             future.span(),
         );
         let vtable_glue = Ident::new(
-            &mangle_vtable_glue(&future_name_string, &namespace),
+            &mangle_vtable_glue(&future_name_string, &namespace.0),
             future.span(),
         );
 
@@ -330,47 +334,28 @@ impl AstPieces {
     }
 }
 
-fn parse_namespace_attribute(attribute: TokenStream) -> Vec<String> {
-    let mut attribute = attribute.into_iter();
-    match attribute.next() {
-        Some(TokenTree::Ident(key)) if key.to_string() == "namespace" => {}
-        None => return vec![],
-        Some(_) => panic!("expected `namespace = ...`"),
-    }
+mod keywords {
+    use syn::custom_keyword;
+    custom_keyword!(namespace);
+}
 
-    let mut namespace = vec![];
-    match attribute.next() {
-        Some(TokenTree::Punct(punct)) if punct.as_char() == '=' => {}
-        _ => panic!("expected `=` after `namespace`"),
-    }
-    loop {
-        // Parse `::`.
-        let mut tt = attribute.next();
-        match tt {
-            Some(TokenTree::Punct(punct))
-                if punct.as_char() == ':' && punct.spacing() == Spacing::Joint =>
-            {
-                tt = attribute.next();
-                match tt {
-                    Some(TokenTree::Punct(punct)) if punct.as_char() == ':' => {
-                        tt = attribute.next();
-                    }
-                    _ => panic!("expected `::` in namespace"),
-                }
-            }
-            Some(_) if namespace.is_empty() => {
-                // Leading `::` is optional.
-            }
-            Some(_) => panic!("expected `::` in namespace"),
-            None => break,
-        }
+struct NamespaceAttribute(Vec<String>);
 
-        match tt {
-            Some(TokenTree::Ident(segment)) => namespace.push(segment.to_string()),
-            _ => panic!("expected namespace segment"),
+impl Parse for NamespaceAttribute {
+    fn parse(input: ParseStream) -> ParseResult<Self> {
+        if input.is_empty() {
+            return Ok(NamespaceAttribute(vec![]));
         }
+        input.parse::<keywords::namespace>()?;
+        input.parse::<Token![=]>()?;
+        let path = input.call(Path::parse_mod_style)?;
+        Ok(NamespaceAttribute(
+            path.segments
+                .iter()
+                .map(|segment| segment.ident.to_string())
+                .collect(),
+        ))
     }
-    namespace
 }
 
 fn mangle_drop_glue(name: &str, future: &str, namespace: &[String]) -> String {
