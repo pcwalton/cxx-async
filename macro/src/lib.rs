@@ -13,7 +13,6 @@
 //!
 //! Don't depend on this crate directly; just use the reexported macro in `cxx-async`.
 
-use bitvec::prelude::{bitvec, Lsb0};
 use proc_macro::TokenStream;
 use quote::quote;
 use std::collections::HashMap;
@@ -450,7 +449,7 @@ fn mangle_cxx_name(tokens: &[CxxNameToken]) -> String {
     let (mut substitutions, mut substitution_count) = (HashMap::new(), 0u32);
 
     // A stack of groups. True if substitution is eligible in this context; false if it is not.
-    let mut substitution_eligible = bitvec![1];
+    let mut substitution_eligible = vec![true];
 
     for token in tokens {
         match *token {

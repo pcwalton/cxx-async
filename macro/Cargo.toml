@@ -9,6 +9,5 @@ edition = "2021"
 proc-macro = true
 
 [dependencies]
-bitvec = "0.22"
 quote = "1"
 syn = "1"
