@@ -26,19 +26,64 @@
 #include <utility>
 #include "rust/cxx.h"
 
+// Preprocessor abuse follows...
+
 #define CXXASYNC_ASSERT(cond) ::rust::async::cxxasync_assert(cond)
 
-#define CXXASYNC_DEFINE_FUTURE(name, type)     \
-  template <>                                  \
-  struct rust::async::RustFutureTraits<name> { \
-    typedef type YieldResult;                  \
-    typedef type FinalResult;                  \
+#define CXXASYNC_JOIN_NAMESPACE_1(a0)                              a0
+#define CXXASYNC_JOIN_NAMESPACE_2(a0, a1)                          a0::a1
+#define CXXASYNC_JOIN_NAMESPACE_3(a0, a1, a2)                      a0::a1::a2
+#define CXXASYNC_JOIN_NAMESPACE_4(a0, a1, a2, a3)                  a0::a1::a2::a3
+#define CXXASYNC_JOIN_NAMESPACE_5(a0, a1, a2, a3, a4)              a0::a1::a2::a3::a4
+#define CXXASYNC_JOIN_NAMESPACE_6(a0, a1, a2, a3, a4, a5)          a0::a1::a2::a3::a4::a5
+#define CXXASYNC_JOIN_NAMESPACE_7(a0, a1, a2, a3, a4, a5, a6)      a0::a1::a2::a3::a4::a5::a6
+#define CXXASYNC_JOIN_NAMESPACE_8(a0, a1, a2, a3, a4, a5, a6, a7)  a0::a1::a2::a3::a4::a5::a6::a7
+
+#define CXXASYNC_JOIN_DOLLAR_1(a0)                              a0
+#define CXXASYNC_JOIN_DOLLAR_2(a0, a1)                          a0##$##a1
+#define CXXASYNC_JOIN_DOLLAR_3(a0, a1, a2)                      a0##$##a1##$##a2
+#define CXXASYNC_JOIN_DOLLAR_4(a0, a1, a2, a3)                  a0##$##a1##$##a2##$##a3
+#define CXXASYNC_JOIN_DOLLAR_5(a0, a1, a2, a3, a4)              a0##$##a1##$##a2##$##a3##$##a4
+#define CXXASYNC_JOIN_DOLLAR_6(a0, a1, a2, a3, a4, a5)          a0##$##a1##$##a2##$##a3##$##a4##$##a5
+#define CXXASYNC_JOIN_DOLLAR_7(a0, a1, a2, a3, a4, a5, a6)      a0##$##a1##$##a2##$##a3##$##a4##$##a5##$##a6
+#define CXXASYNC_JOIN_DOLLAR_8(a0, a1, a2, a3, a4, a5, a6, a7)  a0##$##a1##$##a2##$##a3##$##a4##$##a5##$##a6##$##a7
+
+// Need a level of indirection here because of https://stackoverflow.com/a/1489985
+#define CXXASYNC_CONCAT_3_IMPL(a, b, c)  a##b##c
+#define CXXASYNC_CONCAT_3(a, b, c)       CXXASYNC_CONCAT_3_IMPL(a, b, c)
+
+// Concatenates `prefix` to the number of variadic arguments supplied (e.g. `prefix_1`,
+// `prefix_2`, etc.)
+#define CXXASYNC_DISPATCH_VARIADIC_IMPL(prefix, unused, a0, a1, a2, a3, a4, a5, a6, a7, ...)  prefix##a7
+#define CXXASYNC_DISPATCH_VARIADIC(prefix, ...) \
+    CXXASYNC_DISPATCH_VARIADIC_IMPL(prefix, __VA_ARGS__, 8, 7, 6, 5, 4, 3, 2, 1, )
+
+#define CXXASYNC_JOIN_NAMESPACE(...) \
+    CXXASYNC_DISPATCH_VARIADIC(CXXASYNC_JOIN_NAMESPACE_, __VA_ARGS__)(__VA_ARGS__)
+#define CXXASYNC_JOIN_DOLLAR(...) \
+    CXXASYNC_DISPATCH_VARIADIC(CXXASYNC_JOIN_DOLLAR_, __VA_ARGS__)(__VA_ARGS__)
+
+#define CXXASYNC_DEFINE_FUTURE(type, ...)                                                 \
+  extern "C" const rust::async::Vtable<CXXASYNC_JOIN_NAMESPACE(__VA_ARGS__)>*                        \
+    CXXASYNC_CONCAT_3(cxxasync_, CXXASYNC_JOIN_DOLLAR(__VA_ARGS__), _vtable)();           \
+  template <>                                                                             \
+  struct rust::async::RustFutureTraits<CXXASYNC_JOIN_NAMESPACE(__VA_ARGS__)> {            \
+    typedef type YieldResult;                                                             \
+    typedef type FinalResult;                                                             \
+    static const rust::async::Vtable<CXXASYNC_JOIN_NAMESPACE(__VA_ARGS__)>* vtable() {    \
+      return CXXASYNC_CONCAT_3(cxxasync_, CXXASYNC_JOIN_DOLLAR(__VA_ARGS__), _vtable());  \
+    }                                                                                     \
   };
-#define CXXASYNC_DEFINE_STREAM(name, type)     \
-  template <>                                  \
-  struct rust::async::RustFutureTraits<name> { \
-    typedef type YieldResult;                  \
-    typedef void FinalResult;                  \
+#define CXXASYNC_DEFINE_STREAM(type, ...)                                                \
+  extern "C" const rust::async::Vtable<CXXASYNC_JOIN_NAMESPACE(__VA_ARGS__)>*                        \
+    CXXASYNC_CONCAT_3(cxxasync_, CXXASYNC_JOIN_DOLLAR(__VA_ARGS__), _vtable)();           \
+  template <>                                                                             \
+  struct rust::async::RustFutureTraits<CXXASYNC_JOIN_NAMESPACE(__VA_ARGS__)> {            \
+    typedef type YieldResult;                                                             \
+    typedef void FinalResult;                                                             \
+    static const rust::async::Vtable<CXXASYNC_JOIN_NAMESPACE(__VA_ARGS__)>* vtable() {    \
+      return CXXASYNC_CONCAT_3(cxxasync_, CXXASYNC_JOIN_DOLLAR(__VA_ARGS__), _vtable());  \
+    }                                                                                     \
   };
 
 namespace rust {
@@ -50,12 +95,6 @@ class RustFutureTraits {};
 
 template <typename Future>
 struct Vtable;
-
-template <typename Future>
-class FutureVtableProvider {
- public:
-  static const rust::async::Vtable<Future>* vtable();
-};
 
 template <typename Future>
 using RustYieldResultFor = typename RustFutureTraits<Future>::YieldResult;
@@ -519,8 +558,7 @@ class RustPromiseBase {
  public:
   RustPromiseBase()
       : m_execlet(),
-        m_channel(
-            FutureVtableProvider<Future>::vtable()->channel(m_execlet.raw())) {}
+        m_channel(RustFutureTraits<Future>::vtable()->channel(m_execlet.raw())) {}
 
   rust::Box<Future> get_return_object() noexcept {
     return std::move(m_channel.future);
@@ -540,7 +578,7 @@ class RustPromiseBase {
     behavior::TryCatch<Future, behavior::Custom>::trycatch(
         []() { std::rethrow_exception(std::current_exception()); },
         [&](const char* what) {
-          const Vtable<Future>* vtable = FutureVtableProvider<Future>::vtable();
+          const Vtable<Future>* vtable = RustFutureTraits<Future>::vtable();
           vtable->sender_send(
               *m_channel.sender,
               static_cast<uint32_t>(FuturePollStatus::Error),
@@ -612,7 +650,7 @@ class RustPromise<Future, YieldResultIsVoid, false> final
   void return_value(FinalResult&& value) {
     RustFutureResult<FinalResult> result;
     new (&result.m_result) FinalResult(std::move(value));
-    FutureVtableProvider<Future>::vtable()->sender_send(
+    RustFutureTraits<Future>::vtable()->sender_send(
         *this->m_channel.sender,
         static_cast<uint32_t>(FuturePollStatus::Complete),
         reinterpret_cast<const uint8_t*>(&result),
@@ -626,7 +664,7 @@ class RustPromise<Future, YieldResultIsVoid, true> final
     : public RustStreamPromiseBase<Future, YieldResultIsVoid> {
  public:
   void return_void() {
-    FutureVtableProvider<Future>::vtable()->sender_send(
+    RustFutureTraits<Future>::vtable()->sender_send(
         *this->m_channel.sender,
         static_cast<uint32_t>(FuturePollStatus::Complete),
         nullptr,
@@ -647,7 +685,7 @@ FutureWakeStatus RustFutureReceiver<Future>::wake(
   }
 
   m_status = static_cast<FuturePollStatus>(
-      FutureVtableProvider<Future>::vtable()->future_poll(
+      RustFutureTraits<Future>::vtable()->future_poll(
           *m_future, &m_result, coroutine));
   return static_cast<FutureWakeStatus>(m_status);
 }
@@ -688,7 +726,7 @@ inline FutureWakeStatus RustStreamAwaiter<Future>::poll_next(
   RustFutureResult<YieldResult> result;
   new (&result.m_result) YieldResult(std::move(m_value));
   RustSendResult send_result = static_cast<RustSendResult>(
-      FutureVtableProvider<Future>::vtable()->sender_send(
+      RustFutureTraits<Future>::vtable()->sender_send(
           this->m_sender,
           static_cast<uint32_t>(FuturePollStatus::Running),
           reinterpret_cast<const uint8_t*>(&result),

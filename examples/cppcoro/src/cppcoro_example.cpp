@@ -40,11 +40,11 @@
 #include "rust/cxx_async.h"
 #include "rust/cxx_async_cppcoro.h"
 
-CXXASYNC_DEFINE_FUTURE(RustFutureVoid, void);
-CXXASYNC_DEFINE_FUTURE(RustFutureF64, double);
-CXXASYNC_DEFINE_FUTURE(RustFutureString, rust::String);
-CXXASYNC_DEFINE_FUTURE(foo::bar::RustFutureStringNamespaced, rust::String);
-CXXASYNC_DEFINE_STREAM(RustStreamString, rust::String);
+CXXASYNC_DEFINE_FUTURE(void, RustFutureVoid);
+CXXASYNC_DEFINE_FUTURE(double, RustFutureF64);
+CXXASYNC_DEFINE_FUTURE(rust::String, RustFutureString);
+CXXASYNC_DEFINE_FUTURE(rust::String, foo, bar, RustFutureStringNamespaced);
+CXXASYNC_DEFINE_STREAM(rust::String, RustStreamString);
 
 const size_t EXAMPLE_SPLIT_LIMIT = 32;
 const size_t EXAMPLE_ARRAY_SIZE = 16384;

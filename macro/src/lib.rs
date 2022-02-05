@@ -57,7 +57,8 @@ pub fn bridge_future(attribute: TokenStream, item: TokenStream) -> TokenStream {
         future,
         output,
         drop_sender_glue,
-        vtable_glue,
+        vtable_glue_ident,
+        vtable_glue_link_name,
     } = AstPieces::from_token_streams(attribute, item);
     (quote! {
         /// A future shared between Rust and C++.
@@ -135,9 +136,10 @@ pub fn bridge_future(attribute: TokenStream, item: TokenStream) -> TokenStream {
             ::cxx_async::drop_glue(ptr)
         }
 
-        #[no_mangle]
         #[doc(hidden)]
-        pub unsafe extern "C" fn #vtable_glue() -> *const ::cxx_async::CxxAsyncVtable {
+        #[allow(non_snake_case)]
+        #[export_name = #vtable_glue_link_name]
+        pub unsafe extern "C" fn #vtable_glue_ident() -> *const ::cxx_async::CxxAsyncVtable {
             static VTABLE: ::cxx_async::CxxAsyncVtable = ::cxx_async::CxxAsyncVtable {
                 channel: ::cxx_async::future_channel::<#future, #output> as *mut u8,
                 sender_send: ::cxx_async::sender_future_send::<#output> as *mut u8,
@@ -185,7 +187,8 @@ pub fn bridge_stream(attribute: TokenStream, item: TokenStream) -> TokenStream {
         future: stream,
         output: item,
         drop_sender_glue,
-        vtable_glue,
+        vtable_glue_ident,
+        vtable_glue_link_name,
     } = AstPieces::from_token_streams(attribute, item);
     (quote! {
         /// A multi-shot stream shared between Rust and C++.
@@ -263,9 +266,10 @@ pub fn bridge_stream(attribute: TokenStream, item: TokenStream) -> TokenStream {
             ::cxx_async::drop_glue(ptr)
         }
 
-        #[no_mangle]
         #[doc(hidden)]
-        pub unsafe extern "C" fn #vtable_glue() -> *const ::cxx_async::CxxAsyncVtable {
+        #[allow(non_snake_case)]
+        #[export_name = #vtable_glue_link_name]
+        pub unsafe extern "C" fn #vtable_glue_ident() -> *const ::cxx_async::CxxAsyncVtable {
             // TODO(pcwalton): Support C++ calling Rust Streams.
             static VTABLE: ::cxx_async::CxxAsyncVtable = ::cxx_async::CxxAsyncVtable {
                 channel: ::cxx_async::stream_channel::<#stream, #item> as *mut u8,
@@ -286,8 +290,10 @@ struct AstPieces {
     output: Type,
     // The symbol name of the glue function that drops a sender.
     drop_sender_glue: Ident,
-    // The symbol name of the future/stream vtable.
-    vtable_glue: Ident,
+    // The internal Rust symbol name of the future/stream vtable.
+    vtable_glue_ident: Ident,
+    // The external C++ link name of the future/stream vtable.
+    vtable_glue_link_name: String,
 }
 
 impl AstPieces {
@@ -319,16 +325,33 @@ impl AstPieces {
             &mangle_drop_glue("RustSender", &future_name_string, &namespace.0),
             future.span(),
         );
-        let vtable_glue = Ident::new(
-            &mangle_vtable_glue(&future_name_string, &namespace.0),
+        let vtable_glue_ident = Ident::new(
+            &format!(
+                "cxxasync_{}{}_vtable",
+                namespace
+                    .0
+                    .iter()
+                    .map(|piece| format!("{}_", piece))
+                    .collect::<String>(),
+                future_name_string
+            ),
             future.span(),
         );
+        let vtable_glue_link_name = format!(
+                "cxxasync_{}{}_vtable",
+                namespace
+                    .0
+                    .iter()
+                    .map(|piece| format!("{}$", piece))
+                    .collect::<String>(),
+                future_name_string);
 
         AstPieces {
             future,
             output,
             drop_sender_glue,
-            vtable_glue,
+            vtable_glue_ident,
+            vtable_glue_link_name,
         }
     }
 }
@@ -382,30 +405,6 @@ fn mangle_drop_glue(name: &str, future: &str, namespace: &[String]) -> String {
         CxxNameToken::EndQName,
         CxxNameToken::EndTemplate,
         CxxNameToken::Name("drop"),
-        CxxNameToken::EndQName,
-        CxxNameToken::VoidArg,
-    ]);
-    mangle_cxx_name(&tokens)
-}
-
-fn mangle_vtable_glue(future_name_string: &str, namespace: &[String]) -> String {
-    let mut tokens = vec![
-        CxxNameToken::StartQName,
-        CxxNameToken::Name("rust"),
-        CxxNameToken::Name("async"),
-        CxxNameToken::Name("FutureVtableProvider"),
-        CxxNameToken::StartTemplate,
-    ];
-    push_cxx_name_tokens_for_namespace(
-        &mut tokens,
-        namespace
-            .iter()
-            .map(|ident| &**ident)
-            .chain(iter::once(future_name_string)),
-    );
-    tokens.extend_from_slice(&[
-        CxxNameToken::EndTemplate,
-        CxxNameToken::Name("vtable"),
         CxxNameToken::EndQName,
         CxxNameToken::VoidArg,
     ]);
