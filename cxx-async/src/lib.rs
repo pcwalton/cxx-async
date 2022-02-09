@@ -218,6 +218,7 @@ pub type CxxAsyncResult<T> = Result<T, CxxAsyncException>;
 pub struct CxxAsyncVtable {
     pub channel: *mut u8,
     pub sender_send: *mut u8,
+    pub sender_drop: *mut u8,
     pub future_poll: *mut u8,
 }
 
@@ -237,7 +238,7 @@ where
     // The receiving end.
     future: Box<Fut>,
     // The sending end.
-    sender: Box<CxxAsyncSender<Out>>,
+    sender: CxxAsyncSender<Out>,
 }
 
 // A sender/receiver pair for the return value of a wrapped C++ multi-shot coroutine.
@@ -253,7 +254,7 @@ where
     // The receiving end.
     future: Box<Stm>,
     // The sending end.
-    sender: Box<CxxAsyncSender<Item>>,
+    sender: CxxAsyncSender<Item>,
 }
 
 // Allows the Rust polling interface to drive C++ tasks to completion.
@@ -652,7 +653,16 @@ pub struct CxxAsyncReceiver<Item> {
 //
 // This must be public because the `bridge_stream` macro needs to name it.
 #[doc(hidden)]
-pub struct CxxAsyncSender<Item>(Option<SpscChannel<Item>>);
+#[repr(transparent)]
+pub struct CxxAsyncSender<Item>(*mut SpscChannel<Item>);
+
+impl<Item> Drop for CxxAsyncSender<Item> {
+    fn drop(&mut self) {
+        unsafe {
+            drop(Box::from_raw(self.0))
+        }
+    }
+}
 
 // This is a little weird in that `CxxAsyncReceiver` behaves as a oneshot if it's treated as a
 // Future and an SPSC stream if it's treated as a Stream. But since the programmer only ever
@@ -811,7 +821,7 @@ pub unsafe extern "C" fn future_channel<Fut, Out>(
 {
     let channel = SpscChannel::new();
     let oneshot = CxxAsyncFutureChannel {
-        sender: Box::new(CxxAsyncSender(Some(channel.clone()))),
+        sender: CxxAsyncSender(Box::into_raw(Box::new(channel.clone()))),
         future: Box::new(
             CxxAsyncReceiver {
                 receiver: channel,
@@ -838,7 +848,7 @@ pub unsafe extern "C" fn stream_channel<Stm, Item>(
 {
     let channel = SpscChannel::new();
     let stream = CxxAsyncStreamChannel {
-        sender: Box::new(CxxAsyncSender(Some(channel.clone()))),
+        sender: CxxAsyncSender(Box::into_raw(Box::new(channel.clone()))),
         future: Box::new(
             CxxAsyncReceiver {
                 receiver: channel,
@@ -952,6 +962,14 @@ pub unsafe extern "C" fn sender_stream_send<Item>(
         }
         _ => unreachable!(),
     }
+}
+
+// C++ calls this to destroy a sender.
+//
+// SAFETY: This is a low-level function called by our C++ code.
+#[doc(hidden)]
+pub unsafe extern "C" fn sender_drop<Item>(_: CxxAsyncSender<Item>) {
+    // Destructor automatically runs.
 }
 
 unsafe fn unpack_value<Output>(value: *const u8) -> Output {

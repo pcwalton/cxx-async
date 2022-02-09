@@ -64,7 +64,7 @@
     CXXASYNC_DISPATCH_VARIADIC(CXXASYNC_JOIN_DOLLAR_, __VA_ARGS__)(__VA_ARGS__)
 
 #define CXXASYNC_DEFINE_FUTURE(type, ...)                                                 \
-  extern "C" const rust::async::Vtable<CXXASYNC_JOIN_NAMESPACE(__VA_ARGS__)>*                        \
+  extern "C" const rust::async::Vtable<CXXASYNC_JOIN_NAMESPACE(__VA_ARGS__)>*             \
     CXXASYNC_CONCAT_3(cxxasync_, CXXASYNC_JOIN_DOLLAR(__VA_ARGS__), _vtable)();           \
   template <>                                                                             \
   struct rust::async::RustFutureTraits<CXXASYNC_JOIN_NAMESPACE(__VA_ARGS__)> {            \
@@ -74,8 +74,8 @@
       return CXXASYNC_CONCAT_3(cxxasync_, CXXASYNC_JOIN_DOLLAR(__VA_ARGS__), _vtable());  \
     }                                                                                     \
   };
-#define CXXASYNC_DEFINE_STREAM(type, ...)                                                \
-  extern "C" const rust::async::Vtable<CXXASYNC_JOIN_NAMESPACE(__VA_ARGS__)>*                        \
+#define CXXASYNC_DEFINE_STREAM(type, ...)                                                 \
+  extern "C" const rust::async::Vtable<CXXASYNC_JOIN_NAMESPACE(__VA_ARGS__)>*             \
     CXXASYNC_CONCAT_3(cxxasync_, CXXASYNC_JOIN_DOLLAR(__VA_ARGS__), _vtable)();           \
   template <>                                                                             \
   struct rust::async::RustFutureTraits<CXXASYNC_JOIN_NAMESPACE(__VA_ARGS__)> {            \
@@ -107,13 +107,32 @@ using RustChannelFor = typename RustFutureTraits<Future>::Channel;
 // requires the macro to define drop glue for the `rust::Box` destructor to
 // call, and that's a bit messy.
 template <typename Future>
-class RustSender;
-template <typename Future>
 struct RustChannel;
 template <typename Future>
 class RustPromiseBase;
 template <typename Future, bool YieldResultIsVoid, bool FinalResultIsVoid>
 class RustPromise;
+
+template <typename Future>
+class RustSender {
+  void *m_ptr;
+
+  RustSender() = delete;
+  RustSender(RustSender &) = delete;
+
+public:
+  ~RustSender() {
+    if (m_ptr == nullptr)
+      return;
+    // Passing the wrapped pointer as though it were the sender works because `CxxAsyncSender` is
+    // marked as `#[repr(transparent)]`.
+    RustFutureTraits<Future>::vtable()->sender_drop(m_ptr);
+    m_ptr = nullptr;
+  }
+  RustSender(RustSender &&other) : m_ptr(other.m_ptr) {
+    other.m_ptr = nullptr;
+  }
+};
 
 class SuspendedCoroutine;
 
@@ -309,13 +328,14 @@ struct Vtable {
       uint32_t status,
       const void* value,
       const void* waker_data);
+  void (*sender_drop)(void* self);
   uint32_t (*future_poll)(Future& self, void* result, const void* waker_data);
 };
 
 template <typename Future>
 struct RustChannel {
   rust::Box<Future> future;
-  rust::Box<RustSender<Future>> sender;
+  RustSender<Future> sender;
 };
 
 // A temporary place to hold future results or errors that are sent to or
@@ -580,7 +600,7 @@ class RustPromiseBase {
         [&](const char* what) {
           const Vtable<Future>* vtable = RustFutureTraits<Future>::vtable();
           vtable->sender_send(
-              *m_channel.sender,
+              m_channel.sender,
               static_cast<uint32_t>(FuturePollStatus::Error),
               what,
               nullptr);
@@ -623,7 +643,7 @@ class RustStreamPromiseBase<Future, false> : public RustPromiseBase<Future> {
  public:
   RustStreamAwaiter<Future> yield_value(
       RustYieldResultFor<Future>&& value) noexcept {
-    return RustStreamAwaiter(*this->m_channel.sender, std::move(value));
+    return RustStreamAwaiter(this->m_channel.sender, std::move(value));
   }
 };
 
@@ -651,7 +671,7 @@ class RustPromise<Future, YieldResultIsVoid, false> final
     RustFutureResult<FinalResult> result;
     new (&result.m_result) FinalResult(std::move(value));
     RustFutureTraits<Future>::vtable()->sender_send(
-        *this->m_channel.sender,
+        this->m_channel.sender,
         static_cast<uint32_t>(FuturePollStatus::Complete),
         reinterpret_cast<const uint8_t*>(&result),
         nullptr);
@@ -665,7 +685,7 @@ class RustPromise<Future, YieldResultIsVoid, true> final
  public:
   void return_void() {
     RustFutureTraits<Future>::vtable()->sender_send(
-        *this->m_channel.sender,
+        this->m_channel.sender,
         static_cast<uint32_t>(FuturePollStatus::Complete),
         nullptr,
         nullptr);

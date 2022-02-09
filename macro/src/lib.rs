@@ -15,9 +15,6 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
-use std::collections::HashMap;
-use std::fmt::Write;
-use std::iter;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
 use syn::{Fields, Ident, ItemStruct, Path, Token, Type};
 
@@ -56,7 +53,6 @@ pub fn bridge_future(attribute: TokenStream, item: TokenStream) -> TokenStream {
     let AstPieces {
         future,
         output,
-        drop_sender_glue,
         vtable_glue_ident,
         vtable_glue_link_name,
     } = AstPieces::from_token_streams(attribute, item);
@@ -122,20 +118,6 @@ pub fn bridge_future(attribute: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
 
-        // The C++ bridge calls this to destroy a sender.
-        //
-        // I'm not sure if this can ever legitimately happen, but C++ wants to link to this
-        // function anyway, so let's provide it.
-        //
-        // SAFETY: This is a raw FFI function called by `cxx`. `cxx` ensures that `ptr` is a
-        // valid Box.
-        #[no_mangle]
-        #[doc(hidden)]
-        pub unsafe extern "C" fn #drop_sender_glue(ptr: *mut
-                Box<::cxx_async::CxxAsyncSender<#output>>) {
-            ::cxx_async::drop_glue(ptr)
-        }
-
         #[doc(hidden)]
         #[allow(non_snake_case)]
         #[export_name = #vtable_glue_link_name]
@@ -143,6 +125,7 @@ pub fn bridge_future(attribute: TokenStream, item: TokenStream) -> TokenStream {
             static VTABLE: ::cxx_async::CxxAsyncVtable = ::cxx_async::CxxAsyncVtable {
                 channel: ::cxx_async::future_channel::<#future, #output> as *mut u8,
                 sender_send: ::cxx_async::sender_future_send::<#output> as *mut u8,
+                sender_drop: ::cxx_async::sender_drop::<#output> as *mut u8,
                 future_poll: ::cxx_async::future_poll::<#future, #output> as *mut u8,
             };
             return &VTABLE;
@@ -186,7 +169,6 @@ pub fn bridge_stream(attribute: TokenStream, item: TokenStream) -> TokenStream {
     let AstPieces {
         future: stream,
         output: item,
-        drop_sender_glue,
         vtable_glue_ident,
         vtable_glue_link_name,
     } = AstPieces::from_token_streams(attribute, item);
@@ -252,20 +234,6 @@ pub fn bridge_stream(attribute: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
 
-        // The C++ bridge calls this to destroy a sender.
-        //
-        // I'm not sure if this can ever legitimately happen, but C++ wants to link to this
-        // function anyway, so let's provide it.
-        //
-        // SAFETY: This is a raw FFI function called by `cxx`. `cxx` ensures that `ptr` is a
-        // valid Box.
-        #[no_mangle]
-        #[doc(hidden)]
-        pub unsafe extern "C" fn #drop_sender_glue(ptr: *mut
-                Box<::cxx_async::CxxAsyncSender<#item>>) {
-            ::cxx_async::drop_glue(ptr)
-        }
-
         #[doc(hidden)]
         #[allow(non_snake_case)]
         #[export_name = #vtable_glue_link_name]
@@ -274,6 +242,7 @@ pub fn bridge_stream(attribute: TokenStream, item: TokenStream) -> TokenStream {
             static VTABLE: ::cxx_async::CxxAsyncVtable = ::cxx_async::CxxAsyncVtable {
                 channel: ::cxx_async::stream_channel::<#stream, #item> as *mut u8,
                 sender_send: ::cxx_async::sender_stream_send::<#item> as *mut u8,
+                sender_drop: ::cxx_async::sender_drop::<#item> as *mut u8,
                 future_poll: ::std::ptr::null_mut(),
             };
             return &VTABLE;
@@ -288,8 +257,6 @@ struct AstPieces {
     future: Ident,
     // The output type of the future or the item type of the stream.
     output: Type,
-    // The symbol name of the glue function that drops a sender.
-    drop_sender_glue: Ident,
     // The internal Rust symbol name of the future/stream vtable.
     vtable_glue_ident: Ident,
     // The external C++ link name of the future/stream vtable.
@@ -321,10 +288,6 @@ impl AstPieces {
         let future = struct_item.ident;
         let future_name_string = format!("{}", future);
 
-        let drop_sender_glue = Ident::new(
-            &mangle_drop_glue("RustSender", &future_name_string, &namespace.0),
-            future.span(),
-        );
         let vtable_glue_ident = Ident::new(
             &format!(
                 "cxxasync_{}{}_vtable",
@@ -338,18 +301,18 @@ impl AstPieces {
             future.span(),
         );
         let vtable_glue_link_name = format!(
-                "cxxasync_{}{}_vtable",
-                namespace
-                    .0
-                    .iter()
-                    .map(|piece| format!("{}$", piece))
-                    .collect::<String>(),
-                future_name_string);
+            "cxxasync_{}{}_vtable",
+            namespace
+                .0
+                .iter()
+                .map(|piece| format!("{}$", piece))
+                .collect::<String>(),
+            future_name_string
+        );
 
         AstPieces {
             future,
             output,
-            drop_sender_glue,
             vtable_glue_ident,
             vtable_glue_link_name,
         }
@@ -378,109 +341,4 @@ impl Parse for NamespaceAttribute {
                 .collect(),
         ))
     }
-}
-
-fn mangle_drop_glue(name: &str, future: &str, namespace: &[String]) -> String {
-    let mut tokens = vec![
-        CxxNameToken::StartQName,
-        CxxNameToken::Name("rust"),
-        CxxNameToken::Name("cxxbridge1"),
-        CxxNameToken::Name("Box"),
-        CxxNameToken::StartTemplate,
-        CxxNameToken::StartQName,
-        CxxNameToken::Name("rust"),
-        CxxNameToken::Name("async"),
-        CxxNameToken::Name(name),
-        CxxNameToken::StartTemplate,
-    ];
-    push_cxx_name_tokens_for_namespace(
-        &mut tokens,
-        namespace
-            .iter()
-            .map(|ident| &**ident)
-            .chain(iter::once(future)),
-    );
-    tokens.extend_from_slice(&[
-        CxxNameToken::EndTemplate,
-        CxxNameToken::EndQName,
-        CxxNameToken::EndTemplate,
-        CxxNameToken::Name("drop"),
-        CxxNameToken::EndQName,
-        CxxNameToken::VoidArg,
-    ]);
-    mangle_cxx_name(&tokens)
-}
-
-#[derive(Clone, Copy)]
-enum CxxNameToken<'a> {
-    Name(&'a str),
-    StartQName,
-    EndQName,
-    StartTemplate,
-    EndTemplate,
-    VoidArg,
-}
-
-fn push_cxx_name_tokens_for_namespace<'a, I>(tokens: &mut Vec<CxxNameToken<'a>>, name: I)
-where
-    I: Iterator<Item = &'a str> + Clone,
-{
-    let is_namespaced = name.clone().count() > 1;
-    if is_namespaced {
-        tokens.push(CxxNameToken::StartQName);
-    }
-    for segment in name {
-        tokens.push(CxxNameToken::Name(segment));
-    }
-    if is_namespaced {
-        tokens.push(CxxNameToken::EndQName);
-    }
-}
-
-// Mangles a C++ name.
-//
-// This isn't a general C++ name mangling routine; it's just enough for what we need to
-// emit.
-//
-// TODO(pcwalton): MSVC mangling.
-fn mangle_cxx_name(tokens: &[CxxNameToken]) -> String {
-    let mut string = "_Z".to_owned();
-    let (mut substitutions, mut substitution_count) = (HashMap::new(), 0u32);
-
-    // A stack of groups. True if substitution is eligible in this context; false if it is not.
-    let mut substitution_eligible = vec![true];
-
-    for token in tokens {
-        match *token {
-            CxxNameToken::Name(name) if *substitution_eligible.last().unwrap() => {
-                match substitutions.get(name) {
-                    None => {
-                        substitutions.insert(name, substitution_count);
-                        substitution_count += 1;
-                        write!(&mut string, "{}{}", name.len(), name).unwrap();
-                        *substitution_eligible.last_mut().unwrap() = false;
-                    }
-                    Some(&0) => write!(&mut string, "S_").unwrap(),
-                    Some(_) => unimplemented!(),
-                }
-            }
-            CxxNameToken::Name(name) => {
-                write!(&mut string, "{}{}", name.len(), name).unwrap();
-            }
-            CxxNameToken::StartQName => {
-                substitution_eligible.push(true);
-                string.push('N');
-            }
-            CxxNameToken::StartTemplate => {
-                substitution_eligible.push(true);
-                string.push('I')
-            }
-            CxxNameToken::EndQName | CxxNameToken::EndTemplate => {
-                substitution_eligible.pop();
-                string.push('E');
-            }
-            CxxNameToken::VoidArg => string.push('v'),
-        }
-    }
-    string
 }
