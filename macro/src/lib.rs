@@ -67,12 +67,26 @@ pub fn bridge_future(attribute: TokenStream, item: TokenStream) -> TokenStream {
 
         impl #future {
             // SAFETY: See: https://docs.rs/pin-utils/0.1.0/pin_utils/macro.unsafe_pinned.html
-            // 1. The struct does not implement Drop (other than for debugging, which doesn't
-            // move the field).
-            // 2. The struct doesn't implement Unpin.
-            // 3. The struct isn't `repr(packed)`.
+            // 1. The struct doesn't move fields in Drop. Our hogging the Drop implementation
+            //    ensures this.
+            // 2. The inner field implements Unpin. We ensure this in the `assert_field_is_unpin`
+            //    method.
+            // 3. The struct isn't `repr(packed)`. We define the struct and don't have this
+            //    attribute.
             ::cxx_async::unsafe_pinned!(future: ::cxx_async::private::BoxFuture<'static,
                 ::cxx_async::CxxAsyncResult<#output>>);
+
+            #[doc(hidden)]
+            fn assert_field_is_unpin() {
+                fn check<T>() where T: Unpin {}
+                check::<#output>()
+            }
+        }
+
+        // Define a Drop implementation so that end users don't. If end users are allowed to define
+        // Drop, that could make our use of `unsafe_pinned!` unsafe.
+        impl Drop for #future {
+            fn drop(&mut self) {}
         }
 
         // Define how to box up a future.
@@ -183,12 +197,26 @@ pub fn bridge_stream(attribute: TokenStream, item: TokenStream) -> TokenStream {
 
         impl #stream {
             // SAFETY: See: https://docs.rs/pin-utils/0.1.0/pin_utils/macro.unsafe_pinned.html
-            // 1. The struct does not implement Drop (other than for debugging, which doesn't
-            // move the field).
-            // 2. The struct doesn't implement Unpin.
-            // 3. The struct isn't `repr(packed)`.
+            // 1. The struct doesn't move fields in Drop. Our hogging the Drop implementation
+            //    ensures this.
+            // 2. The inner field implements Unpin. We ensure this in the `assert_field_is_unpin`
+            //    method.
+            // 3. The struct isn't `repr(packed)`. We define the struct and don't have this
+            //    attribute.
             ::cxx_async::unsafe_pinned!(stream: ::cxx_async::private::BoxStream<'static,
                 ::cxx_async::CxxAsyncResult<#item>>);
+
+            #[doc(hidden)]
+            fn assert_field_is_unpin() {
+                fn check<T>() where T: Unpin {}
+                check::<#item>()
+            }
+        }
+
+        // Define a Drop implementation so that end users don't. If end users are allowed to define
+        // Drop, that could make our use of `unsafe_pinned!` unsafe.
+        impl Drop for #stream {
+            fn drop(&mut self) {}
         }
 
         // Define how to box up a future.
