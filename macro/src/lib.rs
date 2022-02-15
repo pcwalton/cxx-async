@@ -16,7 +16,7 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
-use syn::{Fields, Ident, ItemStruct, Path, Token, Type};
+use syn::{Fields, Ident, ItemStruct, Lit, LitStr, Path, Token, Type};
 
 /// Defines a future type that can be awaited from both Rust and C++.
 ///
@@ -52,16 +52,15 @@ use syn::{Fields, Ident, ItemStruct, Path, Token, Type};
 pub fn bridge_future(attribute: TokenStream, item: TokenStream) -> TokenStream {
     let AstPieces {
         future,
+        qualified_name,
         output,
         vtable_glue_ident,
         vtable_glue_link_name,
     } = AstPieces::from_token_streams(attribute, item);
     (quote! {
         /// A future shared between Rust and C++.
+        #[repr(transparent)]
         pub struct #future {
-            // FIXME(pcwalton): Unfortunately, as far as I can tell this has to be double-boxed
-            // because we have to return these by value and we need the `CxxAsyncReceiver`
-            // type to be Sized.
             future: ::cxx_async::private::BoxFuture<'static, ::cxx_async::CxxAsyncResult<#output>>,
         }
 
@@ -92,11 +91,11 @@ pub fn bridge_future(attribute: TokenStream, item: TokenStream) -> TokenStream {
         // Define how to box up a future.
         impl ::cxx_async::IntoCxxAsyncFuture for #future {
             type Output = #output;
-            fn fallible<Fut>(future: Fut) -> Box<Self> where Fut: ::std::future::Future<Output =
+            fn fallible<Fut>(future: Fut) -> Self where Fut: ::std::future::Future<Output =
                     ::cxx_async::CxxAsyncResult<#output>> + Send + 'static {
-                Box::new(#future {
+                #future {
                     future: Box::pin(future),
-                })
+                }
             }
         }
 
@@ -118,14 +117,21 @@ pub fn bridge_future(attribute: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
 
+        // Make sure that the future type can be returned by value.
+        // See: https://github.com/dtolnay/cxx/pull/672
+        unsafe impl ::cxx::ExternType for #future {
+            type Id = ::cxx::type_id!(#qualified_name);
+            type Kind = ::cxx::kind::Trivial;
+        }
+
         // Convenience wrappers so that client code doesn't have to import `IntoCxxAsyncFuture`.
         impl #future {
-            pub fn infallible<Fut>(future: Fut) -> Box<Self>
+            pub fn infallible<Fut>(future: Fut) -> Self
                     where Fut: ::std::future::Future<Output = #output> + Send + 'static {
                 <#future as ::cxx_async::IntoCxxAsyncFuture>::infallible(future)
             }
 
-            pub fn fallible<Fut>(future: Fut) -> Box<Self>
+            pub fn fallible<Fut>(future: Fut) -> Self
                     where Fut: ::std::future::Future<Output =
                         ::cxx_async::CxxAsyncResult<#output>> + Send + 'static {
                 <#future as ::cxx_async::IntoCxxAsyncFuture>::fallible(future)
@@ -141,6 +147,7 @@ pub fn bridge_future(attribute: TokenStream, item: TokenStream) -> TokenStream {
                 sender_send: ::cxx_async::sender_future_send::<#output> as *mut u8,
                 sender_drop: ::cxx_async::sender_drop::<#output> as *mut u8,
                 future_poll: ::cxx_async::future_poll::<#future, #output> as *mut u8,
+                future_drop: ::cxx_async::future_drop::<#future> as *mut u8,
             };
             return &VTABLE;
         }
@@ -182,16 +189,15 @@ pub fn bridge_future(attribute: TokenStream, item: TokenStream) -> TokenStream {
 pub fn bridge_stream(attribute: TokenStream, item: TokenStream) -> TokenStream {
     let AstPieces {
         future: stream,
+        qualified_name,
         output: item,
         vtable_glue_ident,
         vtable_glue_link_name,
     } = AstPieces::from_token_streams(attribute, item);
     (quote! {
         /// A multi-shot stream shared between Rust and C++.
+        #[repr(transparent)]
         pub struct #stream {
-            // FIXME(pcwalton): Unfortunately, as far as I can tell this has to be double-boxed
-            // because we have to return these by value and we need the `CxxAsyncReceiver` type
-            // to be Sized.
             stream: ::cxx_async::private::BoxStream<'static, ::cxx_async::CxxAsyncResult<#item>>,
         }
 
@@ -222,11 +228,11 @@ pub fn bridge_stream(attribute: TokenStream, item: TokenStream) -> TokenStream {
         // Define how to box up a future.
         impl ::cxx_async::IntoCxxAsyncStream for #stream {
             type Item = #item;
-            fn fallible<Stm>(stream: Stm) -> Box<Self> where Stm: ::cxx_async::private::Stream<Item =
+            fn fallible<Stm>(stream: Stm) -> Self where Stm: ::cxx_async::private::Stream<Item =
                     ::cxx_async::CxxAsyncResult<#item>> + Send + 'static {
-                Box::new(#stream {
+                #stream {
                     stream: Box::pin(stream),
-                })
+                }
             }
         }
 
@@ -248,14 +254,21 @@ pub fn bridge_stream(attribute: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
 
+        // Make sure that the stream type can be returned by value.
+        // See: https://github.com/dtolnay/cxx/pull/672
+        unsafe impl ::cxx::ExternType for #stream {
+            type Id = ::cxx::type_id!(#qualified_name);
+            type Kind = ::cxx::kind::Trivial;
+        }
+
         // Convenience wrappers so that client code doesn't have to import `IntoCxxAsyncFuture`.
         impl #stream {
-            pub fn infallible<Stm>(stream: Stm) -> Box<Self>
+            pub fn infallible<Stm>(stream: Stm) -> Self
                     where Stm: ::cxx_async::private::Stream<Item = #item> + Send + 'static {
                 <#stream as ::cxx_async::IntoCxxAsyncStream>::infallible(stream)
             }
 
-            pub fn fallible<Stm>(stream: Stm) -> Box<Self>
+            pub fn fallible<Stm>(stream: Stm) -> Self
                     where Stm: ::cxx_async::private::Stream<Item =
                         ::cxx_async::CxxAsyncResult<#item>> + Send + 'static {
                 <#stream as ::cxx_async::IntoCxxAsyncStream>::fallible(stream)
@@ -272,6 +285,7 @@ pub fn bridge_stream(attribute: TokenStream, item: TokenStream) -> TokenStream {
                 sender_send: ::cxx_async::sender_stream_send::<#item> as *mut u8,
                 sender_drop: ::cxx_async::sender_drop::<#item> as *mut u8,
                 future_poll: ::std::ptr::null_mut(),
+                future_drop: ::cxx_async::future_drop::<#stream> as *mut u8,
             };
             return &VTABLE;
         }
@@ -283,6 +297,9 @@ pub fn bridge_stream(attribute: TokenStream, item: TokenStream) -> TokenStream {
 struct AstPieces {
     // The name of the future or stream type.
     future: Ident,
+    // The fully-qualified name (i.e. including C++ namespace if any) of the future or stream type,
+    // as a quoted string.
+    qualified_name: Lit,
     // The output type of the future or the item type of the stream.
     output: Type,
     // The internal Rust symbol name of the future/stream vtable.
@@ -314,7 +331,19 @@ impl AstPieces {
         };
 
         let future = struct_item.ident;
-        let future_name_string = format!("{}", future);
+
+        let qualified_name = Lit::Str(LitStr::new(
+            &format!(
+                "{}{}",
+                namespace
+                    .0
+                    .iter()
+                    .map(|piece| format!("{}::", piece))
+                    .collect::<String>(),
+                future
+            ),
+            future.span(),
+        ));
 
         let vtable_glue_ident = Ident::new(
             &format!(
@@ -324,7 +353,7 @@ impl AstPieces {
                     .iter()
                     .map(|piece| format!("{}_", piece))
                     .collect::<String>(),
-                future_name_string
+                future
             ),
             future.span(),
         );
@@ -335,11 +364,12 @@ impl AstPieces {
                 .iter()
                 .map(|piece| format!("{}$", piece))
                 .collect::<String>(),
-            future_name_string
+            future
         );
 
         AstPieces {
             future,
+            qualified_name,
             output,
             vtable_glue_ident,
             vtable_glue_link_name,

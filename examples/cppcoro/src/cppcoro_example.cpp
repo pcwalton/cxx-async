@@ -40,12 +40,6 @@
 #include "rust/cxx_async.h"
 #include "rust/cxx_async_cppcoro.h"
 
-CXXASYNC_DEFINE_FUTURE(void, RustFutureVoid);
-CXXASYNC_DEFINE_FUTURE(double, RustFutureF64);
-CXXASYNC_DEFINE_FUTURE(rust::String, RustFutureString);
-CXXASYNC_DEFINE_FUTURE(rust::String, foo, bar, RustFutureStringNamespaced);
-CXXASYNC_DEFINE_STREAM(rust::String, RustStreamString);
-
 const size_t EXAMPLE_SPLIT_LIMIT = 32;
 const size_t EXAMPLE_ARRAY_SIZE = 16384;
 
@@ -84,12 +78,11 @@ static cppcoro::task<double> dot_product() {
       &array_a[0], &array_b[0], array_a.size());
 }
 
-rust::Box<RustFutureF64> cppcoro_dot_product() {
+RustFutureF64 cppcoro_dot_product() {
   co_return co_await dot_product();
 }
 
-rust::Box<foo::bar::RustFutureStringNamespaced>
-cppcoro_get_namespaced_string() {
+foo::bar::RustFutureStringNamespaced cppcoro_get_namespaced_string() {
   co_return rust::String("hello world");
 }
 
@@ -102,7 +95,7 @@ double cppcoro_schedule_rust_dot_product() {
       cppcoro::schedule_on(g_thread_pool, rust_dot_product()));
 }
 
-rust::Box<RustFutureF64> cppcoro_not_product() {
+RustFutureF64 cppcoro_not_product() {
   if (true)
     throw MyException("kaboom");
   co_return 1.0; // Just to make this function a coroutine.
@@ -110,7 +103,7 @@ rust::Box<RustFutureF64> cppcoro_not_product() {
 
 rust::String cppcoro_call_rust_not_product() {
   try {
-    rust::Box<RustFutureF64> oneshot_receiver = rust_not_product();
+    RustFutureF64 oneshot_receiver = rust_not_product();
     cppcoro::sync_wait(std::move(oneshot_receiver));
     std::terminate();
   } catch (const std::exception& error) {
@@ -118,12 +111,12 @@ rust::String cppcoro_call_rust_not_product() {
   }
 }
 
-rust::Box<RustFutureString> cppcoro_ping_pong(int i) {
+RustFutureString cppcoro_ping_pong(int i) {
   std::string string(co_await rust_cppcoro_ping_pong(i));
   co_return std::move(string) + "pong ";
 }
 
-rust::Box<RustFutureVoid> cppcoro_complete() {
+RustFutureVoid cppcoro_complete() {
   co_await dot_product(); // Discard the result.
   co_return;
 }
@@ -141,13 +134,13 @@ void cppcoro_send_to_dropped_future_go() {
   g_dropped_future_sem->signal();
 }
 
-rust::Box<RustFutureF64> cppcoro_send_to_dropped_future() {
+RustFutureF64 cppcoro_send_to_dropped_future() {
   g_dropped_future_sem = new Sem;
   co_return co_await cppcoro::schedule_on(
       g_thread_pool, cppcoro_send_to_dropped_future_inner());
 }
 
-rust::Box<RustStreamString> cppcoro_fizzbuzz() {
+RustStreamString cppcoro_fizzbuzz() {
   for (int i = 1; i <= 15; i++) {
     if (i % 15 == 0) {
       co_yield rust::String("FizzBuzz");
@@ -172,13 +165,13 @@ static cppcoro::task<rust::String> fizzbuzz_inner(int i) {
   co_return rust::String(std::to_string(i));
 }
 
-rust::Box<RustStreamString> cppcoro_indirect_fizzbuzz() {
+RustStreamString cppcoro_indirect_fizzbuzz() {
   for (int i = 1; i <= 15; i++)
     co_yield co_await fizzbuzz_inner(i);
   co_return;
 }
 
-rust::Box<RustStreamString> cppcoro_not_fizzbuzz() {
+RustStreamString cppcoro_not_fizzbuzz() {
   for (int i = 1; i <= 10; i++)
     co_yield co_await fizzbuzz_inner(i);
   throw MyException("kablam");
@@ -197,7 +190,7 @@ static DestructorTest g_destructor_test;
 // This function, `cppcoro_drop_coroutine_wait()` is called first, and the
 // resulting future is dropped. Then `cppcoro_drop_coroutine_signal()` is called
 // and should return.
-rust::Box<RustFutureVoid> cppcoro_drop_coroutine_wait() {
+RustFutureVoid cppcoro_drop_coroutine_wait() {
   struct SignalOnDestruction {
     ~SignalOnDestruction() {
       g_destructor_test.m_sem.signal();
@@ -211,7 +204,7 @@ rust::Box<RustFutureVoid> cppcoro_drop_coroutine_wait() {
   co_return;
 }
 
-rust::Box<RustFutureVoid> cppcoro_drop_coroutine_signal() {
+RustFutureVoid cppcoro_drop_coroutine_signal() {
   // Signal `cppcoro_drop_coroutine_wait()`, which should be running in the
   // background, reparented to the reaper.
   g_destructor_test.m_latch.count_down();

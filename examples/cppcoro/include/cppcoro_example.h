@@ -15,10 +15,11 @@
 #include "rust/cxx.h"
 #include "rust/cxx_async.h"
 
-struct RustFutureVoid;
-struct RustFutureF64;
-struct RustFutureString;
-struct RustStreamString;
+CXXASYNC_DEFINE_FUTURE(void, RustFutureVoid);
+CXXASYNC_DEFINE_FUTURE(double, RustFutureF64);
+CXXASYNC_DEFINE_FUTURE(rust::String, RustFutureString);
+CXXASYNC_DEFINE_FUTURE(rust::String, foo, bar, RustFutureStringNamespaced);
+CXXASYNC_DEFINE_STREAM(rust::String, RustStreamString);
 
 class MyException : public std::exception {
   const char* m_message;
@@ -53,28 +54,20 @@ struct TryCatch<T, Custom> {
 } // namespace async
 } // namespace rust
 
-namespace foo {
-namespace bar {
-
-struct RustFutureStringNamespaced;
-
-} // namespace bar
-} // namespace foo
-
-rust::Box<RustFutureF64> cppcoro_dot_product();
+RustFutureF64 cppcoro_dot_product();
 double cppcoro_call_rust_dot_product();
 double cppcoro_schedule_rust_dot_product();
-rust::Box<foo::bar::RustFutureStringNamespaced> cppcoro_get_namespaced_string();
-rust::Box<RustFutureF64> cppcoro_not_product();
+foo::bar::RustFutureStringNamespaced cppcoro_get_namespaced_string();
+RustFutureF64 cppcoro_not_product();
 rust::String cppcoro_call_rust_not_product();
-rust::Box<RustFutureString> cppcoro_ping_pong(int i);
-rust::Box<RustFutureVoid> cppcoro_complete();
+RustFutureString cppcoro_ping_pong(int i);
+RustFutureVoid cppcoro_complete();
 void cppcoro_send_to_dropped_future_go();
-rust::Box<RustFutureF64> cppcoro_send_to_dropped_future();
-rust::Box<RustStreamString> cppcoro_fizzbuzz();
-rust::Box<RustStreamString> cppcoro_indirect_fizzbuzz();
-rust::Box<RustStreamString> cppcoro_not_fizzbuzz();
-rust::Box<RustFutureVoid> cppcoro_drop_coroutine_wait();
-rust::Box<RustFutureVoid> cppcoro_drop_coroutine_signal();
+RustFutureF64 cppcoro_send_to_dropped_future();
+RustStreamString cppcoro_fizzbuzz();
+RustStreamString cppcoro_indirect_fizzbuzz();
+RustStreamString cppcoro_not_fizzbuzz();
+RustFutureVoid cppcoro_drop_coroutine_wait();
+RustFutureVoid cppcoro_drop_coroutine_signal();
 
 #endif // CXX_ASYNC_CPPCORO_EXAMPLE_H

@@ -20,35 +20,36 @@ mod ffi {
     }
 
     extern "Rust" {
-        type RustFutureVoid;
-        type RustFutureF64;
-        type RustFutureString;
-        #[namespace = foo::bar]
-        type RustFutureStringNamespaced;
-        type RustStreamString;
-        fn rust_dot_product() -> Box<RustFutureF64>;
-        fn rust_not_product() -> Box<RustFutureF64>;
-        fn rust_cppcoro_ping_pong(i: i32) -> Box<RustFutureString>;
+        fn rust_dot_product() -> RustFutureF64;
+        fn rust_not_product() -> RustFutureF64;
+        fn rust_cppcoro_ping_pong(i: i32) -> RustFutureString;
     }
 
     unsafe extern "C++" {
         include!("cppcoro_example.h");
 
-        fn cppcoro_dot_product() -> Box<RustFutureF64>;
+        type RustFutureVoid = crate::RustFutureVoid;
+        type RustFutureF64 = crate::RustFutureF64;
+        type RustFutureString = crate::RustFutureString;
+        #[namespace = foo::bar]
+        type RustFutureStringNamespaced = crate::RustFutureStringNamespaced;
+        type RustStreamString = crate::RustStreamString;
+
+        fn cppcoro_dot_product() -> RustFutureF64;
         fn cppcoro_call_rust_dot_product() -> f64;
         fn cppcoro_schedule_rust_dot_product() -> f64;
-        fn cppcoro_get_namespaced_string() -> Box<RustFutureStringNamespaced>;
-        fn cppcoro_not_product() -> Box<RustFutureF64>;
+        fn cppcoro_get_namespaced_string() -> RustFutureStringNamespaced;
+        fn cppcoro_not_product() -> RustFutureF64;
         fn cppcoro_call_rust_not_product() -> String;
-        fn cppcoro_ping_pong(i: i32) -> Box<RustFutureString>;
-        fn cppcoro_complete() -> Box<RustFutureVoid>;
+        fn cppcoro_ping_pong(i: i32) -> RustFutureString;
+        fn cppcoro_complete() -> RustFutureVoid;
         fn cppcoro_send_to_dropped_future_go();
-        fn cppcoro_send_to_dropped_future() -> Box<RustFutureF64>;
-        fn cppcoro_fizzbuzz() -> Box<RustStreamString>;
-        fn cppcoro_indirect_fizzbuzz() -> Box<RustStreamString>;
-        fn cppcoro_not_fizzbuzz() -> Box<RustStreamString>;
-        fn cppcoro_drop_coroutine_wait() -> Box<RustFutureVoid>;
-        fn cppcoro_drop_coroutine_signal() -> Box<RustFutureVoid>;
+        fn cppcoro_send_to_dropped_future() -> RustFutureF64;
+        fn cppcoro_fizzbuzz() -> RustStreamString;
+        fn cppcoro_indirect_fizzbuzz() -> RustStreamString;
+        fn cppcoro_not_fizzbuzz() -> RustStreamString;
+        fn cppcoro_drop_coroutine_wait() -> RustFutureVoid;
+        fn cppcoro_drop_coroutine_signal() -> RustFutureVoid;
     }
 }
 
@@ -117,17 +118,17 @@ async fn dot_product(range: Range<usize>) -> f64 {
     range.clone().map(|index| a[index] * b[index]).sum()
 }
 
-fn rust_dot_product() -> Box<RustFutureF64> {
+fn rust_dot_product() -> RustFutureF64 {
     RustFutureF64::infallible(dot_product(0..VECTOR_LENGTH))
 }
 
-fn rust_not_product() -> Box<RustFutureF64> {
+fn rust_not_product() -> RustFutureF64 {
     RustFutureF64::fallible(async {
         Err(CxxAsyncException::new("kapow".to_owned().into_boxed_str()))
     })
 }
 
-fn rust_cppcoro_ping_pong(i: i32) -> Box<RustFutureString> {
+fn rust_cppcoro_ping_pong(i: i32) -> RustFutureString {
     RustFutureString::infallible(async move {
         format!(
             "{}ping ",

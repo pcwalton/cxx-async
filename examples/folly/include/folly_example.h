@@ -18,10 +18,11 @@
 #include "rust/cxx.h"
 #include "rust/cxx_async.h"
 
-struct RustFutureVoid;
-struct RustFutureF64;
-struct RustFutureString;
-struct RustStreamString;
+CXXASYNC_DEFINE_FUTURE(void, RustFutureVoid);
+CXXASYNC_DEFINE_FUTURE(double, RustFutureF64);
+CXXASYNC_DEFINE_FUTURE(rust::String, RustFutureString);
+CXXASYNC_DEFINE_FUTURE(rust::String, foo, bar, RustFutureStringNamespaced);
+CXXASYNC_DEFINE_STREAM(rust::String, RustStreamString);
 
 class MyException : public std::exception {
   const char* m_message;
@@ -58,29 +59,21 @@ struct TryCatch<T, Custom> {
 } // namespace async
 } // namespace rust
 
-namespace foo {
-namespace bar {
-
-struct RustFutureStringNamespaced;
-
-}
-} // namespace foo
-
-rust::Box<RustFutureF64> folly_dot_product_coro();
-rust::Box<RustFutureF64> folly_dot_product_futures();
-rust::Box<foo::bar::RustFutureStringNamespaced> folly_get_namespaced_string();
+RustFutureF64 folly_dot_product_coro();
+RustFutureF64 folly_dot_product_futures();
+foo::bar::RustFutureStringNamespaced folly_get_namespaced_string();
 double folly_call_rust_dot_product();
 double folly_schedule_rust_dot_product();
-rust::Box<RustFutureF64> folly_not_product();
+RustFutureF64 folly_not_product();
 rust::String folly_call_rust_not_product();
-rust::Box<RustFutureString> folly_ping_pong(int i);
-rust::Box<RustFutureVoid> folly_complete();
+RustFutureString folly_ping_pong(int i);
+RustFutureVoid folly_complete();
 void folly_send_to_dropped_future_go();
-rust::Box<RustFutureF64> folly_send_to_dropped_future();
-rust::Box<RustStreamString> folly_fizzbuzz();
-rust::Box<RustStreamString> folly_indirect_fizzbuzz();
-rust::Box<RustStreamString> folly_not_fizzbuzz();
-rust::Box<RustFutureVoid> folly_drop_coroutine_wait();
-rust::Box<RustFutureVoid> folly_drop_coroutine_signal();
+RustFutureF64 folly_send_to_dropped_future();
+RustStreamString folly_fizzbuzz();
+RustStreamString folly_indirect_fizzbuzz();
+RustStreamString folly_not_fizzbuzz();
+RustFutureVoid folly_drop_coroutine_wait();
+RustFutureVoid folly_drop_coroutine_signal();
 
 #endif // CXX_ASYNC_FOLLY_EXAMPLE_H

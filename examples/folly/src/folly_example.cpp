@@ -48,12 +48,6 @@
 #include "rust/cxx_async.h"
 #include "rust/cxx_async_folly.h"
 
-CXXASYNC_DEFINE_FUTURE(void, RustFutureVoid);
-CXXASYNC_DEFINE_FUTURE(double, RustFutureF64);
-CXXASYNC_DEFINE_FUTURE(rust::String, RustFutureString);
-CXXASYNC_DEFINE_FUTURE(rust::String, foo, bar, RustFutureStringNamespaced);
-CXXASYNC_DEFINE_STREAM(rust::String, RustStreamString);
-
 const size_t EXAMPLE_SPLIT_LIMIT = 32;
 const size_t EXAMPLE_ARRAY_SIZE = 16384;
 
@@ -142,36 +136,36 @@ static folly::coro::Task<rust::String> ping_pong(int i) {
   co_return std::move(string) + "pong ";
 }
 
-rust::Box<RustFutureF64> folly_dot_product_coro() {
+RustFutureF64 folly_dot_product_coro() {
   co_return co_await dot_product_coro();
 }
 
-rust::Box<RustFutureF64> folly_dot_product_futures() {
+RustFutureF64 folly_dot_product_futures() {
   co_return co_await dot_product_futures();
 }
 
-rust::Box<foo::bar::RustFutureStringNamespaced> folly_get_namespaced_string() {
+foo::bar::RustFutureStringNamespaced folly_get_namespaced_string() {
   co_await dot_product_coro();
   co_return rust::String("hello world");
 }
 
 double folly_call_rust_dot_product() {
-  rust::Box<RustFutureF64> future = rust_dot_product();
+  RustFutureF64 future = rust_dot_product();
   return folly::coro::blockingWait(std::move(future));
 }
 
 double folly_schedule_rust_dot_product() {
-  rust::Box<RustFutureF64> future = rust_dot_product();
+  RustFutureF64 future = rust_dot_product();
   return folly::coro::blockingWait(std::move(future));
 }
 
-rust::Box<RustFutureF64> folly_not_product() {
+RustFutureF64 folly_not_product() {
   co_return co_await not_product();
 }
 
 rust::String folly_call_rust_not_product() {
   try {
-    rust::Box<RustFutureF64> oneshot_receiver = rust_not_product();
+    RustFutureF64 oneshot_receiver = rust_not_product();
     folly::coro::blockingWait(std::move(oneshot_receiver));
     std::terminate();
   } catch (const std::exception& error) {
@@ -179,11 +173,11 @@ rust::String folly_call_rust_not_product() {
   }
 }
 
-rust::Box<RustFutureString> folly_ping_pong(int i) {
+RustFutureString folly_ping_pong(int i) {
   co_return co_await ping_pong(i);
 }
 
-rust::Box<RustFutureVoid> folly_complete() {
+RustFutureVoid folly_complete() {
   co_await dot_product_futures(); // Discard the result.
   co_return;
 }
@@ -201,13 +195,12 @@ void folly_send_to_dropped_future_go() {
   g_dropped_future_sem->signal();
 }
 
-rust::Box<RustFutureF64> folly_send_to_dropped_future() {
+RustFutureF64 folly_send_to_dropped_future() {
   g_dropped_future_sem = new Sem;
-  co_return co_await folly_send_to_dropped_future_inner().semi().via(
-      g_thread_pool);
+  co_return co_await folly_send_to_dropped_future_inner().semi().via(g_thread_pool);
 }
 
-rust::Box<RustStreamString> folly_fizzbuzz() {
+RustStreamString folly_fizzbuzz() {
   for (int i = 1; i <= 15; i++) {
     if (i % 15 == 0) {
       co_yield rust::String("FizzBuzz");
@@ -232,13 +225,13 @@ static folly::coro::Task<rust::String> fizzbuzz_inner(int i) {
   co_return rust::String(std::to_string(i));
 }
 
-rust::Box<RustStreamString> folly_indirect_fizzbuzz() {
+RustStreamString folly_indirect_fizzbuzz() {
   for (int i = 1; i <= 15; i++)
     co_yield co_await fizzbuzz_inner(i).semi();
   co_return;
 }
 
-rust::Box<RustStreamString> folly_not_fizzbuzz() {
+RustStreamString folly_not_fizzbuzz() {
   for (int i = 1; i <= 10; i++)
     co_yield co_await fizzbuzz_inner(i);
   throw MyException("kablam");
@@ -257,7 +250,7 @@ static DestructorTest g_destructor_test;
 // This function, `folly_drop_coroutine_wait()` is called first, and the
 // resulting future is dropped. Then `folly_drop_coroutine_signal()` is called
 // and should return.
-rust::Box<RustFutureVoid> folly_drop_coroutine_wait() {
+RustFutureVoid folly_drop_coroutine_wait() {
   struct SignalOnDestruction {
     ~SignalOnDestruction() {
       g_destructor_test.m_baton.post();
@@ -271,7 +264,7 @@ rust::Box<RustFutureVoid> folly_drop_coroutine_wait() {
   co_return;
 }
 
-rust::Box<RustFutureVoid> folly_drop_coroutine_signal() {
+RustFutureVoid folly_drop_coroutine_signal() {
   // Signal `folly_drop_coroutine_wait()`, which should be running in the
   // background, reparented to the reaper.
   co_await g_destructor_test.m_barrier.wait();

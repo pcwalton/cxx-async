@@ -44,21 +44,19 @@
 //! ```ignore
 //! #[cxx::bridge]
 //! mod ffi {
-//!     // Give each future type that you want to bridge a name.
-//!     extern "Rust" {
-//!         type RustFutureString;
-//!     }
-//!
-//!     // Async C++ methods that you wish Rust to call go here. Make sure they return one of the
-//!     // boxed future types you declared above.
+//!     // Declare type aliases for each of the future types you wish to use here. Then declare
+//!     // async C++ methods that you wish Rust to call. Make sure they return one of the future
+//!     // types you declared.
 //!     unsafe extern "C++" {
-//!         fn hello_from_cpp() -> Box<RustFutureString>;
+//!         type RustFutureString = crate::RustFutureString;
+//!
+//!         fn hello_from_cpp() -> RustFutureString;
 //!     }
 //!
 //!     // Async Rust methods that you wish C++ to call go here. Again, make sure they return one of
-//!     // the boxed future types you declared above.
+//!     // the future types you declared above.
 //!     extern "Rust" {
-//!         fn hello_from_rust() -> Box<RustFutureString>;
+//!         fn hello_from_rust() -> RustFutureString;
 //!     }
 //! }
 //! ```
@@ -72,7 +70,7 @@
 //! struct RustFutureString(String);
 //! ```
 //!
-//! Now, in your C++ file, make sure to `#include` the right headers:
+//! Now, in your C++ header, make sure to `#include` the right headers:
 //!
 //! ```cpp
 //! #include "rust/cxx.h"
@@ -80,19 +78,21 @@
 //! #include "rust/cxx_async_cppcoro.h"  // Or cxx_async_folly.h, as appropriate.
 //! ```
 //!
-//! And add a call to the `CXXASYNC_DEFINE_FUTURE` macro to define the C++ side of the future:
+//! And add a call to the `CXXASYNC_DEFINE_FUTURE` macro in your headers to define the C++ side of
+//! the future:
 //!
 //! ```cpp
 //! // The first argument is the name you gave the future, and the second argument is the
-//! // corresponding C++ type. The latter is the C++ type that `cxx` maps your Rust type to: in this
-//! // case, `String` maps to `rust::String`, so we supply `rust::String` here.
-//! CXXASYNC_DEFINE_FUTURE(RustFutureString, rust::String);
+//! // corresponding C++ type, with `::` namespace separators replaced with commas. The latter is
+//! // the C++ type that `cxx` maps your Rust type to: in this case, `String` maps to
+//! // `rust::String`, so we supply `rust, String` here.
+//! CXXASYNC_DEFINE_FUTURE(RustFutureString, rust, String);
 //! ```
 //!
 //! You're all set! Now you can define asynchronous C++ code that Rust can call:
 //!
 //! ```cpp
-//! rust::Box<RustFutureString> hello_from_cpp() {
+//! RustFutureString hello_from_cpp() {
 //!     co_return std::string("Hello world!");
 //! }
 //! ```
@@ -111,7 +111,7 @@
 //!
 //! ```ignore
 //! use cxx_async::CxxAsyncResult;
-//! fn hello_from_rust() -> Box<RustFutureString> {
+//! fn hello_from_rust() -> RustFutureString {
 //!     // You can instead use `fallible` if your async block returns a Result.
 //!     RustFutureString::infallible(async { "Hello world!".to_owned() })
 //! }
@@ -220,6 +220,7 @@ pub struct CxxAsyncVtable {
     pub sender_send: *mut u8,
     pub sender_drop: *mut u8,
     pub future_poll: *mut u8,
+    pub future_drop: *mut u8,
 }
 
 unsafe impl Send for CxxAsyncVtable {}
@@ -231,12 +232,9 @@ unsafe impl Sync for CxxAsyncVtable {}
 // definition in `cxx_async.h`.
 #[repr(C)]
 #[doc(hidden)]
-pub struct CxxAsyncFutureChannel<Fut, Out>
-where
-    Fut: Future<Output = CxxAsyncResult<Out>>,
-{
+pub struct CxxAsyncFutureChannel<Fut, Out> {
     // The receiving end.
-    future: Box<Fut>,
+    future: Fut,
     // The sending end.
     sender: CxxAsyncSender<Out>,
 }
@@ -252,7 +250,7 @@ where
     Stm: Stream<Item = CxxAsyncResult<Item>>,
 {
     // The receiving end.
-    future: Box<Stm>,
+    future: Stm,
     // The sending end.
     sender: CxxAsyncSender<Item>,
 }
@@ -299,7 +297,7 @@ impl Execlet {
     // Runs all tasks in the runqueue to completion.
     fn run(&self, cx: &mut Context) {
         // Lock.
-        let mut guard = self.0.0.lock().unwrap();
+        let mut guard = self.0 .0.lock().unwrap();
         debug_assert!(!guard.running);
         guard.running = true;
 
@@ -313,7 +311,7 @@ impl Execlet {
                 task.run();
             }
             // Re-acquire the lock.
-            guard = self.0.0.lock().unwrap();
+            guard = self.0 .0.lock().unwrap();
         }
 
         // Unlock.
@@ -658,9 +656,7 @@ pub struct CxxAsyncSender<Item>(*mut SpscChannel<Item>);
 
 impl<Item> Drop for CxxAsyncSender<Item> {
     fn drop(&mut self) {
-        unsafe {
-            drop(Box::from_raw(self.0))
-        }
+        unsafe { drop(Box::from_raw(self.0)) }
     }
 }
 
@@ -758,14 +754,14 @@ unsafe impl Sync for ExecletTask {}
 ///
 /// You should not need to implement this manually; it's automatically implemented by the
 /// `bridge_future` macro.
-pub trait IntoCxxAsyncFuture {
+pub trait IntoCxxAsyncFuture: Sized {
     /// The type of the value yielded by the future.
     type Output;
 
     /// Wraps a Rust Future that directly returns the output type.
     ///
     /// Use this when you aren't interested in propagating errors to C++ as exceptions.
-    fn infallible<Fut>(future: Fut) -> Box<Self>
+    fn infallible<Fut>(future: Fut) -> Self
     where
         Fut: Future<Output = Self::Output> + Send + 'static,
     {
@@ -775,7 +771,7 @@ pub trait IntoCxxAsyncFuture {
     /// Wraps a Rust Future that returns the output type, wrapped in a `CxxAsyncResult`.
     ///
     /// Use this when you have error values that you want to turn into exceptions on the C++ side.
-    fn fallible<Fut>(future: Fut) -> Box<Self>
+    fn fallible<Fut>(future: Fut) -> Self
     where
         Fut: Future<Output = CxxAsyncResult<Self::Output>> + Send + 'static;
 }
@@ -784,14 +780,14 @@ pub trait IntoCxxAsyncFuture {
 ///
 /// You should not need to implement this manually; it's automatically implemented by the
 /// `bridge_stream` macro.
-pub trait IntoCxxAsyncStream {
+pub trait IntoCxxAsyncStream: Sized {
     /// The type of the values yielded by the stream.
     type Item;
 
     /// Wraps a Rust Stream that directly yields items of the output type.
     ///
     /// Use this when you aren't interested in propagating errors to C++ as exceptions.
-    fn infallible<Stm>(stream: Stm) -> Box<Self>
+    fn infallible<Stm>(stream: Stm) -> Self
     where
         Stm: Stream<Item = Self::Item> + Send + 'static,
         Stm::Item: 'static,
@@ -802,7 +798,7 @@ pub trait IntoCxxAsyncStream {
     /// Wraps a Rust Stream that yields items of the output type, wrapped in `CxxAsyncResult`s.
     ///
     /// Use this when you have error values that you want to turn into exceptions on the C++ side.
-    fn fallible<Stm>(stream: Stm) -> Box<Self>
+    fn fallible<Stm>(stream: Stm) -> Self
     where
         Stm: Stream<Item = CxxAsyncResult<Self::Item>> + Send + 'static;
 }
@@ -822,13 +818,10 @@ pub unsafe extern "C" fn future_channel<Fut, Out>(
     let channel = SpscChannel::new();
     let oneshot = CxxAsyncFutureChannel {
         sender: CxxAsyncSender(Box::into_raw(Box::new(channel.clone()))),
-        future: Box::new(
-            CxxAsyncReceiver {
-                receiver: channel,
-                execlet: Some(Execlet::from_raw_ref(execlet)),
-            }
-            .into(),
-        ),
+        future: CxxAsyncReceiver::<Out> {
+            receiver: channel,
+            execlet: Some(Execlet::from_raw_ref(execlet)),
+        }.into(),
     };
     ptr::copy_nonoverlapping(&oneshot, out_oneshot, 1);
     mem::forget(oneshot);
@@ -849,13 +842,11 @@ pub unsafe extern "C" fn stream_channel<Stm, Item>(
     let channel = SpscChannel::new();
     let stream = CxxAsyncStreamChannel {
         sender: CxxAsyncSender(Box::into_raw(Box::new(channel.clone()))),
-        future: Box::new(
-            CxxAsyncReceiver {
-                receiver: channel,
-                execlet: Some(Execlet::from_raw_ref(execlet)),
-            }
-            .into(),
-        ),
+        future: CxxAsyncReceiver {
+            receiver: channel,
+            execlet: Some(Execlet::from_raw_ref(execlet)),
+        }
+        .into(),
     };
     ptr::copy_nonoverlapping(&stream, out_stream, 1);
     mem::forget(stream);
@@ -921,8 +912,8 @@ pub unsafe extern "C" fn sender_future_send<Item>(
 // If `waker_data` is present, this identifies the coroutine handle that will be awakened if the
 // channel is currently full.
 //
-// Any errors when sending are dropped on the floor. This is the right behavior because futures
-// can be legally dropped in Rust to signal cancellation.
+// Any errors when sending are dropped on the floor. This is because futures can be legally dropped
+// in Rust to signal cancellation.
 #[doc(hidden)]
 pub unsafe extern "C" fn sender_stream_send<Item>(
     this: &mut CxxAsyncSender<Item>,
@@ -1018,14 +1009,13 @@ where
     }
 }
 
-// The C++ bridge indirectly calls this to drop types.
+// C++ calls this to drop a Rust future.
 //
-// SAFETY: This is a low-level function called (indirectly) by `cxx`'s C++ code.
+// SAFETY:
+// * This is a low-level function called by our C++ code.
 #[doc(hidden)]
-pub unsafe extern "C" fn drop_glue<T>(ptr: *mut Box<T>) {
-    let mut boxed: MaybeUninit<Box<T>> = MaybeUninit::uninit();
-    ptr::copy_nonoverlapping(ptr, boxed.as_mut_ptr(), 1);
-    drop(boxed.assume_init());
+pub unsafe extern "C" fn future_drop<Fut>(future: *mut Fut) {
+    ptr::drop_in_place(future);
 }
 
 // Bumps the reference count on a suspended C++ coroutine.

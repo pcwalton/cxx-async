@@ -14,36 +14,37 @@ use std::ops::Range;
 #[cxx::bridge]
 mod ffi {
     extern "Rust" {
-        type RustFutureVoid;
-        type RustFutureF64;
-        type RustFutureString;
-        #[namespace = foo::bar]
-        type RustFutureStringNamespaced;
-        type RustStreamString;
-        fn rust_dot_product() -> Box<RustFutureF64>;
-        fn rust_not_product() -> Box<RustFutureF64>;
-        fn rust_folly_ping_pong(i: i32) -> Box<RustFutureString>;
+        fn rust_dot_product() -> RustFutureF64;
+        fn rust_not_product() -> RustFutureF64;
+        fn rust_folly_ping_pong(i: i32) -> RustFutureString;
     }
 
     unsafe extern "C++" {
         include!("folly_example.h");
 
-        fn folly_dot_product_coro() -> Box<RustFutureF64>;
-        fn folly_dot_product_futures() -> Box<RustFutureF64>;
-        fn folly_get_namespaced_string() -> Box<RustFutureStringNamespaced>;
+        type RustFutureVoid = crate::RustFutureVoid;
+        type RustFutureF64 = crate::RustFutureF64;
+        type RustFutureString = crate::RustFutureString;
+        #[namespace = foo::bar]
+        type RustFutureStringNamespaced = crate::RustFutureStringNamespaced;
+        type RustStreamString = crate::RustStreamString;
+
+        fn folly_dot_product_coro() -> RustFutureF64;
+        fn folly_dot_product_futures() -> RustFutureF64;
+        fn folly_get_namespaced_string() -> RustFutureStringNamespaced;
         fn folly_call_rust_dot_product() -> f64;
         fn folly_schedule_rust_dot_product() -> f64;
-        fn folly_not_product() -> Box<RustFutureF64>;
+        fn folly_not_product() -> RustFutureF64;
         fn folly_call_rust_not_product() -> String;
-        fn folly_ping_pong(i: i32) -> Box<RustFutureString>;
-        fn folly_complete() -> Box<RustFutureVoid>;
+        fn folly_ping_pong(i: i32) -> RustFutureString;
+        fn folly_complete() -> RustFutureVoid;
         fn folly_send_to_dropped_future_go();
-        fn folly_send_to_dropped_future() -> Box<RustFutureF64>;
-        fn folly_fizzbuzz() -> Box<RustStreamString>;
-        fn folly_indirect_fizzbuzz() -> Box<RustStreamString>;
-        fn folly_not_fizzbuzz() -> Box<RustStreamString>;
-        fn folly_drop_coroutine_wait() -> Box<RustFutureVoid>;
-        fn folly_drop_coroutine_signal() -> Box<RustFutureVoid>;
+        fn folly_send_to_dropped_future() -> RustFutureF64;
+        fn folly_fizzbuzz() -> RustStreamString;
+        fn folly_indirect_fizzbuzz() -> RustStreamString;
+        fn folly_not_fizzbuzz() -> RustStreamString;
+        fn folly_drop_coroutine_wait() -> RustFutureVoid;
+        fn folly_drop_coroutine_signal() -> RustFutureVoid;
     }
 }
 
@@ -110,17 +111,17 @@ async fn dot_product(range: Range<usize>) -> f64 {
     range.clone().map(|index| a[index] * b[index]).sum()
 }
 
-fn rust_dot_product() -> Box<RustFutureF64> {
+fn rust_dot_product() -> RustFutureF64 {
     RustFutureF64::infallible(dot_product(0..VECTOR_LENGTH))
 }
 
-fn rust_not_product() -> Box<RustFutureF64> {
+fn rust_not_product() -> RustFutureF64 {
     RustFutureF64::fallible(async {
         Err(CxxAsyncException::new("kapow".to_owned().into_boxed_str()))
     })
 }
 
-fn rust_folly_ping_pong(i: i32) -> Box<RustFutureString> {
+fn rust_folly_ping_pong(i: i32) -> RustFutureString {
     RustFutureString::infallible(async move {
         format!(
             "{}ping ",
