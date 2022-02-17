@@ -9,22 +9,24 @@
 
 // cxx-async/macro/src/lib.rs
 //
-//! The definition of the `#[bridge_future]` macro.
+//! The definition of the `#[bridge]` macro.
 //!
 //! Don't depend on this crate directly; just use the reexported macro in `cxx-async`.
 
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
-use syn::{Fields, Ident, ItemStruct, Lit, LitStr, Path, Token, Type};
+use syn::{Ident, ImplItem, Lit, LitStr, Path, Token, Type, ItemImpl, Visibility, TypePath};
 
-/// Defines a future type that can be awaited from both Rust and C++.
+/// Defines a future or stream type that can be awaited from both Rust and C++.
 ///
 /// The syntax to use is:
 ///
 /// ```ignore
-/// #[cxx_async::bridge_future]
-/// struct RustFutureString(String);
+/// #[cxx_async::bridge]
+/// unsafe impl Future for RustFutureString {
+///     type Output = String;
+/// }
 /// ```
 ///
 /// Here, `RustFutureString` is the name of the future type declared inside the
@@ -34,7 +36,7 @@ use syn::{Fields, Ident, ItemStruct, Lit, LitStr, Path, Token, Type};
 /// `cxx` rules. Err returns are translated into C++ exceptions.
 ///
 /// If the future is inside a C++ namespace, add a `namespace = ...` attribute to the
-/// `#[cxx_async::bridge_future]` attribute like so:
+/// `#[cxx_async::bridge]` attribute like so:
 ///
 /// ```ignore
 /// #[cxx::bridge]
@@ -45,18 +47,30 @@ use syn::{Fields, Ident, ItemStruct, Lit, LitStr, Path, Token, Type};
 ///     }
 /// }
 ///
-/// #[cxx_async::bridge_future(namespace = mycompany::myproject)]
-/// struct RustFutureStringNamespaced(String);
+/// #[cxx_async::bridge(namespace = mycompany::myproject)]
+/// unsafe impl Future for RustFutureStringNamespaced {
+///     type Output = String;
+/// }
 /// ```
 #[proc_macro_attribute]
-pub fn bridge_future(attribute: TokenStream, item: TokenStream) -> TokenStream {
+pub fn bridge(attribute: TokenStream, item: TokenStream) -> TokenStream {
+    let pieces = AstPieces::from_token_streams(attribute, item);
+    match pieces.bridge_trait {
+        BridgeTrait::Future => bridge_future(pieces),
+        BridgeTrait::Stream => bridge_stream(pieces),
+    }
+}
+
+fn bridge_future(pieces: AstPieces) -> TokenStream {
     let AstPieces {
+        bridge_trait: _,
         future,
         qualified_name,
         output,
+        trait_path,
         vtable_glue_ident,
         vtable_glue_link_name,
-    } = AstPieces::from_token_streams(attribute, item);
+    } = pieces;
     (quote! {
         /// A future shared between Rust and C++.
         #[repr(transparent)]
@@ -100,7 +114,7 @@ pub fn bridge_future(attribute: TokenStream, item: TokenStream) -> TokenStream {
         }
 
         // Implement the Rust Future trait.
-        impl ::std::future::Future for #future {
+        impl #trait_path for #future {
             type Output = ::cxx_async::CxxAsyncResult<#output>;
             fn poll(self: ::std::pin::Pin<&mut Self>, cx: &mut ::std::task::Context<'_>)
                     -> ::std::task::Poll<Self::Output> {
@@ -161,7 +175,9 @@ pub fn bridge_future(attribute: TokenStream, item: TokenStream) -> TokenStream {
 ///
 /// ```ignore
 /// #[cxx_async::bridge_stream]
-/// struct RustStreamString(String);
+/// unsafe impl Stream for RustStreamString {
+///     type Item = String;
+/// }
 /// ```
 ///
 /// Here, `RustStreamString` is the name of the stream type declared inside the
@@ -183,17 +199,20 @@ pub fn bridge_future(attribute: TokenStream, item: TokenStream) -> TokenStream {
 /// }
 ///
 /// #[cxx_async::bridge_stream(namespace = mycompany::myproject)]
-/// struct RustStreamStringNamespaced(String);
+/// unsafe impl Stream for RustStreamStringNamespaced {
+///     type Item = String;
+/// }
 /// ```
-#[proc_macro_attribute]
-pub fn bridge_stream(attribute: TokenStream, item: TokenStream) -> TokenStream {
+fn bridge_stream(pieces: AstPieces) -> TokenStream {
     let AstPieces {
+        bridge_trait: _,
         future: stream,
         qualified_name,
         output: item,
+        trait_path,
         vtable_glue_ident,
         vtable_glue_link_name,
-    } = AstPieces::from_token_streams(attribute, item);
+    } = pieces;
     (quote! {
         /// A multi-shot stream shared between Rust and C++.
         #[repr(transparent)]
@@ -237,7 +256,7 @@ pub fn bridge_stream(attribute: TokenStream, item: TokenStream) -> TokenStream {
         }
 
         // Implement the Rust Stream trait.
-        impl ::cxx_async::private::Stream for #stream {
+        impl #trait_path for #stream {
             type Item = ::cxx_async::CxxAsyncResult<#item>;
             fn poll_next(mut self: ::std::pin::Pin<&mut Self>, cx: &mut ::std::task::Context<'_>)
                     -> ::std::task::Poll<Option<Self::Item>> {
@@ -293,8 +312,16 @@ pub fn bridge_stream(attribute: TokenStream, item: TokenStream) -> TokenStream {
     .into()
 }
 
-// AST pieces generated for the `#[bridge_future]` and `#[bridge_stream]` macros.
+// Whether the programmer is implementing `Future` or `Stream`.
+enum BridgeTrait {
+    Future,
+    Stream,
+}
+
+// AST pieces generated for the `#[bridge]` macro.
 struct AstPieces {
+    // Whether the programmer is implementing `Future` or `Stream`.
+    bridge_trait: BridgeTrait,
     // The name of the future or stream type.
     future: Ident,
     // The fully-qualified name (i.e. including C++ namespace if any) of the future or stream type,
@@ -302,6 +329,9 @@ struct AstPieces {
     qualified_name: Lit,
     // The output type of the future or the item type of the stream.
     output: Type,
+    // The path to the trait being implemented, which must be `std::future::Future` or
+    // `futures::Stream`.
+    trait_path: Path,
     // The internal Rust symbol name of the future/stream vtable.
     vtable_glue_ident: Ident,
     // The external C++ link name of the future/stream vtable.
@@ -316,21 +346,83 @@ impl AstPieces {
             Err(_) => panic!("expected possible namespace attribute"),
         };
 
-        let struct_item: ItemStruct = match syn::parse(item) {
-            Ok(struct_item) => struct_item,
-            Err(_) => panic!("expected struct"),
+        let impl_item: ItemImpl = match syn::parse(item) {
+            Ok(impl_item) => impl_item,
+            Err(e) => panic!("expected implementation of `Future` or `Stream`: {:?}", e),
         };
-        let output = match struct_item.fields {
-            Fields::Unnamed(fields) => {
-                if fields.unnamed.len() != 1 {
-                    panic!("expected a tuple struct with a single field");
-                }
-                fields.unnamed.into_iter().next().unwrap().ty
-            }
-            Fields::Named { .. } | Fields::Unit => panic!("expected tuple struct"),
+        if impl_item.unsafety.is_none() {
+            panic!("implementation must be marked `unsafe`")
+        }
+        if impl_item.defaultness.is_some() {
+            panic!("implementation must not be marked default")
+        }
+        if !impl_item.generics.params.is_empty() || impl_item.generics.where_clause.is_some() {
+            panic!("generic bridged futures are unsupported")
+        }
+
+        // We don't check to make sure that `path` is `std::future::Future` or `futures::Stream`
+        // here, even though that's ultimately a requirement, because we would have to perform name
+        // resolution here in the macro to do that. Instead, we take advantage of the fact that
+        // we're going to be generating an implementation of the appropriate trait anyway and simply
+        // supply whatever the user wrote as the name of the trait to be implemented in our final
+        // macro expansion. That way, the Rust compiler ends up checking that the trait that the
+        // user wrote is the right one.
+        let trait_path = match impl_item.trait_ {
+            Some((None, path, _)) => path,
+            _ => panic!("must implement the `Future` or `Stream` trait"),
         };
 
-        let future = struct_item.ident;
+        if impl_item.items.len() != 1 {
+            panic!("expected implementation to contain a single item, `type Output = ...`")
+        }
+        let (bridge_trait, output);
+        match impl_item.items[0] {
+            ImplItem::Type(ref impl_type) => {
+                if !impl_type.attrs.is_empty() {
+                    panic!("attributes on the `type Output = ...` declaration are not supported");
+                }
+                match impl_type.vis {
+                    Visibility::Inherited => {}
+                    _ => {
+                        panic!("`pub` or `crate` visibility modifiers on the `type Output = ...` \
+                            declaration are not supported")
+                    }
+                }
+                if impl_type.defaultness.is_some() {
+                    panic!("`default` specifier on the `type Output = ...` declaration is not \
+                        supported")
+                }
+                if !impl_type.generics.params.is_empty() {
+                    panic!("generics on the `type Output = ...` declaration are not supported")
+                }
+
+                // We use the name of the associated type to disambiguate between a Future and a
+                // Stream implementation.
+                bridge_trait = if impl_type.ident == "Output" {
+                    BridgeTrait::Future
+                } else if impl_type.ident == "Item" {
+                    BridgeTrait::Stream
+                } else {
+                    panic!("implementation must contain an associated type definition named \
+                        `Output` or `Item`")
+                };
+                output = impl_type.ty.clone();
+            }
+            _ => {
+                panic!("expected implementation to contain a single item, `type Output = ...` \
+                    or `type Stream = ...`")
+            }
+        };
+
+        let future = match *impl_item.self_ty {
+            Type::Path(TypePath { qself: None, path }) => {
+                match path.get_ident() {
+                    None => panic!("expected `impl` declaration to implement a single type"),
+                    Some(path) => (*path).clone(),
+                }
+            }
+            _ => panic!("expected `impl` declaration to implement a single type"),
+        };
 
         let qualified_name = Lit::Str(LitStr::new(
             &format!(
@@ -368,9 +460,11 @@ impl AstPieces {
         );
 
         AstPieces {
+            bridge_trait,
             future,
             qualified_name,
             output,
+            trait_path,
             vtable_glue_ident,
             vtable_glue_link_name,
         }

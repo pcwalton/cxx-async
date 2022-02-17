@@ -8,8 +8,9 @@ use cxx_async::CxxAsyncException;
 use futures::executor::{self, ThreadPool};
 use futures::task::SpawnExt;
 use futures::{StreamExt, TryStreamExt};
-use futures::join;
+use futures::{Stream, join};
 use once_cell::sync::Lazy;
+use std::future::Future;
 use std::ops::Range;
 
 #[cxx::bridge]
@@ -53,16 +54,26 @@ mod ffi {
     }
 }
 
-#[cxx_async::bridge_future]
-struct RustFutureVoid(());
-#[cxx_async::bridge_future]
-struct RustFutureF64(f64);
-#[cxx_async::bridge_future]
-struct RustFutureString(String);
-#[cxx_async::bridge_future(namespace = foo::bar)]
-struct RustFutureStringNamespaced(StringNamespaced);
-#[cxx_async::bridge_stream]
-struct RustStreamString(String);
+#[cxx_async::bridge]
+unsafe impl Future for RustFutureVoid {
+    type Output = ();
+}
+#[cxx_async::bridge]
+unsafe impl Future for RustFutureF64 {
+    type Output = f64;
+}
+#[cxx_async::bridge]
+unsafe impl Future for RustFutureString {
+    type Output = String;
+}
+#[cxx_async::bridge(namespace = foo::bar)]
+unsafe impl Future for RustFutureStringNamespaced {
+    type Output = StringNamespaced;
+}
+#[cxx_async::bridge]
+unsafe impl Stream for RustStreamString {
+    type Item = String;
+}
 
 const VECTOR_LENGTH: usize = 16384;
 const SPLIT_LIMIT: usize = 32;

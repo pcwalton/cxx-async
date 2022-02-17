@@ -56,13 +56,14 @@ mod ffi {
 }
 ```
 
-After the `#[cxx::bridge]` block, define the future types using the `#[cxx_async::bridge_future]`
+After the `#[cxx::bridge]` block, define the future types using the `#[cxx_async::bridge]`
 attribute:
 
 ```rust
 // The inner type is the Rust type that this future yields.
-#[cxx_async::bridge_future]
-struct RustFutureString(String);
+unsafe impl Future for RustFutureString {
+    type Output = String;
+}
 ```
 
 Now, in your C++ file, make sure to `#include` the right headers:

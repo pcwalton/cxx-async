@@ -62,12 +62,14 @@
 //! ```
 //!
 //! After the `#[cxx::bridge]` block, define the future types using the
-//! `#[cxx_async::bridge_future]` attribute:
+//! `#[cxx_async::bridge]` attribute:
 //!
 //! ```
-//! // The inner type is the Rust type that this future yields.
-//! #[cxx_async::bridge_future]
-//! struct RustFutureString(String);
+//! // The `Output` type is the Rust type that this future yields.
+//! #[cxx_async::bridge]
+//! unsafe impl Future for RustFutureString {
+//!     type Output = String;
+//! }
 //! ```
 //!
 //! Now, in your C++ header, make sure to `#include` the right headers:
@@ -156,7 +158,7 @@ const SEND_RESULT_WAIT: u32 = 0;
 const SEND_RESULT_SENT: u32 = 1;
 const SEND_RESULT_FINISHED: u32 = 2;
 
-pub use cxx_async_macro::{bridge_future, bridge_stream};
+pub use cxx_async_macro::bridge;
 
 #[doc(hidden)]
 pub use pin_utils::unsafe_pinned;
@@ -210,7 +212,7 @@ impl Error for CxxAsyncException {}
 /// A convenient shorthand for `Result<T, CxxAsyncException>`.
 pub type CxxAsyncResult<T> = Result<T, CxxAsyncException>;
 
-// A table of functions that the `bridge_future` macro emits for the C++ bridge to use.
+// A table of functions that the `bridge` macro emits for the C++ bridge to use.
 //
 // This must match the definition in `cxx_async.h`.
 #[repr(C)]
@@ -752,8 +754,8 @@ unsafe impl Sync for ExecletTask {}
 
 /// Wraps an arbitrary Rust Future in a boxed `cxx-async` future so that it can be returned to C++.
 ///
-/// You should not need to implement this manually; it's automatically implemented by the
-/// `bridge_future` macro.
+/// You should not need to implement this manually; it's automatically implemented by the `bridge`
+/// macro.
 pub trait IntoCxxAsyncFuture: Sized {
     /// The type of the value yielded by the future.
     type Output;
@@ -1076,8 +1078,8 @@ pub unsafe extern "C" fn cxxasync_execlet_submit(
     Execlet::from_raw_ref(this).submit(ExecletTask::new(run, task_data))
 }
 
-// Reexports for the `#[bridge_future]` and `#[bridge_stream]` macros to use internally. Users of
-// this crate shouldn't use these; they should import the `futures` crate directly.
+// Reexports for the `#[bridge]` macro to use internally. Users of this crate shouldn't use these;
+// they should import the `futures` crate directly.
 #[doc(hidden)]
 pub mod private {
     pub use futures::future::BoxFuture;
