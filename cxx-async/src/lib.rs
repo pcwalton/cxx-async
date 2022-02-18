@@ -144,6 +144,7 @@ use std::ffi::CStr;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::future::Future;
 use std::mem::{self, MaybeUninit};
+use std::panic::{self, AssertUnwindSafe};
 use std::pin::Pin;
 use std::sync::{Arc, Condvar, Mutex, Weak};
 use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
@@ -1016,6 +1017,7 @@ unsafe fn unpack_exception(value: *const u8) -> CxxAsyncException {
 // SAFETY:
 // * This is a low-level function called by our C++ code.
 // * `Pin<&mut Future>` is marked `#[repr(transparent)]`, so it's FFI-safe.
+// * We catch all panics inside `poll` so that they don't unwind into C++.
 #[doc(hidden)]
 pub unsafe extern "C" fn future_poll<Fut, Out>(
     this: Pin<&mut Fut>,
@@ -1029,20 +1031,32 @@ where
         waker_data as *const (),
         &CXXASYNC_WAKER_VTABLE,
     ));
-    let mut context = Context::from_waker(&waker);
-    match this.poll(&mut context) {
-        Poll::Ready(Ok(value)) => {
-            ptr::copy_nonoverlapping(&value, result as *mut Out, 1);
-            mem::forget(value);
-            FUTURE_STATUS_COMPLETE
+
+    let this = AssertUnwindSafe(this);
+    let result = panic::catch_unwind(move || {
+        let mut context = Context::from_waker(&waker);
+        match this.0.poll(&mut context) {
+            Poll::Ready(Ok(value)) => {
+                ptr::copy_nonoverlapping(&value, result as *mut Out, 1);
+                mem::forget(value);
+                FUTURE_STATUS_COMPLETE
+            }
+            Poll::Ready(Err(error)) => {
+                let error = error.what().to_owned();
+                ptr::copy_nonoverlapping(&error, result as *mut String, 1);
+                mem::forget(error);
+                FUTURE_STATUS_ERROR
+            }
+            Poll::Pending => FUTURE_STATUS_PENDING,
         }
-        Poll::Ready(Err(error)) => {
-            let error = error.what().to_owned();
-            ptr::copy_nonoverlapping(&error, result as *mut String, 1);
-            mem::forget(error);
-            FUTURE_STATUS_ERROR
+    });
+
+    match result {
+        Ok(result) => result,
+        Err(error) => {
+            eprintln!("Rust async code panicked when awaited from C++: {:?}", error);
+            std::process::abort();
         }
-        Poll::Pending => FUTURE_STATUS_PENDING,
     }
 }
 
