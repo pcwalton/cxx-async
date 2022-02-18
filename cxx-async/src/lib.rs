@@ -142,12 +142,11 @@ use std::error::Error;
 use std::ffi::CStr;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::future::Future;
-use std::mem::MaybeUninit;
 use std::panic::{self, AssertUnwindSafe};
 use std::pin::Pin;
+use std::ptr;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
-use std::ptr;
 
 const FUTURE_STATUS_PENDING: u32 = 0;
 const FUTURE_STATUS_COMPLETE: u32 = 1;
@@ -660,7 +659,7 @@ pub unsafe extern "C" fn sender_future_send<Item>(
     match status {
         FUTURE_STATUS_COMPLETE => {
             // This is a one-shot sender, so sending must always succeed.
-            let sent = this.try_send_value_with(None, || unpack_value::<Item>(value));
+            let sent = this.try_send_value_with(None, || ptr::read(value as *const Item));
             safe_debug_assert!(sent);
         }
         FUTURE_STATUS_ERROR => this.send_exception(unpack_exception(value)),
@@ -717,7 +716,8 @@ pub unsafe extern "C" fn sender_stream_send<Item>(
             SEND_RESULT_FINISHED
         }
         FUTURE_STATUS_RUNNING => {
-            let sent = this.try_send_value_with(context.as_ref(), || unpack_value::<Item>(value));
+            let sent =
+                this.try_send_value_with(context.as_ref(), || ptr::read(value as *const Item));
             if sent {
                 SEND_RESULT_SENT
             } else {
@@ -739,12 +739,6 @@ pub unsafe extern "C" fn sender_stream_send<Item>(
 #[doc(hidden)]
 pub unsafe extern "C" fn sender_drop<Item>(_: CxxAsyncSender<Item>) {
     // Destructor automatically runs.
-}
-
-unsafe fn unpack_value<Output>(value: *const u8) -> Output {
-    let mut staging: MaybeUninit<Output> = MaybeUninit::uninit();
-    ptr::copy_nonoverlapping(value as *const Output, staging.as_mut_ptr(), 1);
-    staging.assume_init()
 }
 
 unsafe fn unpack_exception(value: *const u8) -> CxxAsyncException {
