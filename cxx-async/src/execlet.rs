@@ -15,9 +15,9 @@
 
 use once_cell::sync::OnceCell;
 use std::collections::VecDeque;
+use std::sync::{Arc, Condvar, Mutex, Weak};
+use std::task::{Context, RawWaker, RawWakerVTable, Waker};
 use std::{mem, thread};
-use std::sync::{Arc, Mutex, Weak, Condvar};
-use std::task::{Context, Waker, RawWaker, RawWakerVTable};
 
 // Allows the Rust polling interface to drive C++ tasks to completion.
 //
