@@ -16,7 +16,11 @@
 use proc_macro::TokenStream;
 use quote::quote;
 use syn::parse::{Parse, ParseStream, Result as ParseResult};
-use syn::{Ident, ImplItem, Lit, LitStr, Path, Token, Type, ItemImpl, Visibility, TypePath};
+use syn::spanned::Spanned;
+use syn::{
+    Error as SynError, Ident, ImplItem, ItemImpl, Lit, LitStr, Path, Result as SynResult, Token,
+    Type, TypePath, Visibility,
+};
 
 /// Defines a future or stream type that can be awaited from both Rust and C++.
 ///
@@ -54,10 +58,14 @@ use syn::{Ident, ImplItem, Lit, LitStr, Path, Token, Type, ItemImpl, Visibility,
 /// ```
 #[proc_macro_attribute]
 pub fn bridge(attribute: TokenStream, item: TokenStream) -> TokenStream {
-    let pieces = AstPieces::from_token_streams(attribute, item);
-    match pieces.bridge_trait {
-        BridgeTrait::Future => bridge_future(pieces),
-        BridgeTrait::Stream => bridge_stream(pieces),
+    match AstPieces::from_token_streams(attribute, item) {
+        Err(error) => error.into_compile_error().into(),
+        Ok(pieces @ AstPieces { bridge_trait: BridgeTrait::Future, .. }) => {
+            bridge_future(pieces)
+        }
+        Ok(pieces @ AstPieces { bridge_trait: BridgeTrait::Stream, .. }) => {
+            bridge_stream(pieces)
+        }
     }
 }
 
@@ -339,25 +347,41 @@ struct AstPieces {
 }
 
 impl AstPieces {
-    // Parses the macro arguments and returns the pieces, panicking on error.
-    fn from_token_streams(attribute: TokenStream, item: TokenStream) -> AstPieces {
-        let namespace: NamespaceAttribute = match syn::parse(attribute) {
-            Ok(namespace) => namespace,
-            Err(_) => panic!("expected possible namespace attribute"),
-        };
+    // Parses the macro arguments and returns the pieces, returning a `syn::Error` on error.
+    fn from_token_streams(attribute: TokenStream, item: TokenStream) -> SynResult<AstPieces> {
+        let namespace: NamespaceAttribute = syn::parse(attribute).map_err(|error| {
+            SynError::new(error.span(), "expected possible namespace attribute")
+        })?;
 
-        let impl_item: ItemImpl = match syn::parse(item) {
-            Ok(impl_item) => impl_item,
-            Err(e) => panic!("expected implementation of `Future` or `Stream`: {:?}", e),
-        };
+        let impl_item: ItemImpl = syn::parse(item).map_err(|error| {
+            SynError::new(
+                error.span(),
+                "expected implementation of `Future` or `Stream`",
+            )
+        })?;
         if impl_item.unsafety.is_none() {
-            panic!("implementation must be marked `unsafe`")
+            return Err(SynError::new(
+                impl_item.span(),
+                "implementation must be marked `unsafe`",
+            ));
         }
         if impl_item.defaultness.is_some() {
-            panic!("implementation must not be marked default")
+            return Err(SynError::new(
+                impl_item.span(),
+                "implementation must not be marked default",
+            ));
         }
-        if !impl_item.generics.params.is_empty() || impl_item.generics.where_clause.is_some() {
-            panic!("generic bridged futures are unsupported")
+        if !impl_item.generics.params.is_empty() {
+            return Err(SynError::new(
+                impl_item.generics.params[0].span(),
+                "generic bridged futures are unsupported",
+            ));
+        }
+        if let Some(where_clause) = impl_item.generics.where_clause {
+            return Err(SynError::new(
+                where_clause.where_token.span,
+                "generic bridged futures are unsupported",
+            ));
         }
 
         // We don't check to make sure that `path` is `std::future::Future` or `futures::Stream`
@@ -368,32 +392,56 @@ impl AstPieces {
         // macro expansion. That way, the Rust compiler ends up checking that the trait that the
         // user wrote is the right one.
         let trait_path = match impl_item.trait_ {
-            Some((None, path, _)) => path,
-            _ => panic!("must implement the `Future` or `Stream` trait"),
+            Some((None, ref path, _)) => (*path).clone(),
+            _ => {
+                return Err(SynError::new(
+                    impl_item.span(),
+                    "must implement the `Future` or `Stream` trait",
+                ))
+            }
         };
 
         if impl_item.items.len() != 1 {
-            panic!("expected implementation to contain a single item, `type Output = ...`")
+            return Err(SynError::new(
+                impl_item.span(),
+                "expected implementation to contain a single item, `type Output = ...` or \
+                 `type Item = ...`",
+            ));
         }
+
         let (bridge_trait, output);
         match impl_item.items[0] {
             ImplItem::Type(ref impl_type) => {
                 if !impl_type.attrs.is_empty() {
-                    panic!("attributes on the `type Output = ...` declaration are not supported");
+                    return Err(SynError::new(
+                        impl_type.attrs[0].span(),
+                        "attributes on the `type Output = ...` or `type Item = ...` declaration \
+                         are not supported",
+                    ));
                 }
                 match impl_type.vis {
                     Visibility::Inherited => {}
                     _ => {
-                        panic!("`pub` or `crate` visibility modifiers on the `type Output = ...` \
-                            declaration are not supported")
+                        return Err(SynError::new(
+                            impl_type.vis.span(),
+                            "`pub` or `crate` visibility modifiers on the `type Output = ...` \
+                            or `type Item = ...` declaration are not supported",
+                        ));
                     }
                 }
-                if impl_type.defaultness.is_some() {
-                    panic!("`default` specifier on the `type Output = ...` declaration is not \
-                        supported")
+                if let Some(defaultness) = impl_type.defaultness {
+                    return Err(SynError::new(
+                        defaultness.span(),
+                        "`default` specifier on the `type Output = ...` or `type Item = ...` \
+                         declaration is not supported",
+                    ));
                 }
                 if !impl_type.generics.params.is_empty() {
-                    panic!("generics on the `type Output = ...` declaration are not supported")
+                    return Err(SynError::new(
+                        impl_type.generics.params[0].span(),
+                        "generics on the `type Output = ...` or `type Item = ...` declaration are \
+                         not supported",
+                    ));
                 }
 
                 // We use the name of the associated type to disambiguate between a Future and a
@@ -403,25 +451,38 @@ impl AstPieces {
                 } else if impl_type.ident == "Item" {
                     BridgeTrait::Stream
                 } else {
-                    panic!("implementation must contain an associated type definition named \
-                        `Output` or `Item`")
+                    return Err(SynError::new(
+                        impl_type.ident.span(),
+                        "implementation must contain an associated type definition named \
+                        `Output` or `Item`",
+                    ));
                 };
                 output = impl_type.ty.clone();
             }
             _ => {
-                panic!("expected implementation to contain a single item, `type Output = ...` \
-                    or `type Stream = ...`")
+                return Err(SynError::new(
+                    impl_item.span(),
+                    "expected implementation to contain a single item, `type Output = ...` \
+                    or `type Stream = ...`",
+                ));
             }
         };
 
         let future = match *impl_item.self_ty {
             Type::Path(TypePath { qself: None, path }) => {
-                match path.get_ident() {
-                    None => panic!("expected `impl` declaration to implement a single type"),
-                    Some(path) => (*path).clone(),
-                }
+                path.get_ident().cloned().ok_or_else(|| {
+                    SynError::new(
+                        path.span(),
+                        "expected `impl` declaration to implement a single type",
+                    )
+                })?
             }
-            _ => panic!("expected `impl` declaration to implement a single type"),
+            _ => {
+                return Err(SynError::new(
+                    impl_item.self_ty.span(),
+                    "expected `impl` declaration to implement a single type",
+                ))
+            }
         };
 
         let qualified_name = Lit::Str(LitStr::new(
@@ -459,7 +520,7 @@ impl AstPieces {
             future
         );
 
-        AstPieces {
+        Ok(AstPieces {
             bridge_trait,
             future,
             qualified_name,
@@ -467,7 +528,7 @@ impl AstPieces {
             trait_path,
             vtable_glue_ident,
             vtable_glue_link_name,
-        }
+        })
     }
 }
 
