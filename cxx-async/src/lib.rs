@@ -142,6 +142,7 @@ use std::error::Error;
 use std::ffi::CStr;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::future::Future;
+use std::os::raw::c_char;
 use std::panic::{self, AssertUnwindSafe};
 use std::pin::Pin;
 use std::ptr;
@@ -742,7 +743,7 @@ pub unsafe extern "C" fn sender_drop<Item>(_: CxxAsyncSender<Item>) {
 }
 
 unsafe fn unpack_exception(value: *const u8) -> CxxAsyncException {
-    let string = CStr::from_ptr(value as *const i8);
+    let string = CStr::from_ptr(value as *const c_char);
     CxxAsyncException::new(string.to_string_lossy().into_owned().into_boxed_str())
 }
 
