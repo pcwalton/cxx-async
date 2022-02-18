@@ -255,7 +255,7 @@ fn bridge_stream(pieces: AstPieces) -> TokenStream {
         // Define how to box up a future.
         impl ::cxx_async::IntoCxxAsyncStream for #stream {
             type Item = #item;
-            fn fallible<Stm>(stream: Stm) -> Self where Stm: ::cxx_async::private::Stream<Item =
+            fn fallible<Stm>(stream: Stm) -> Self where Stm: #trait_path<Item =
                     ::cxx_async::CxxAsyncResult<#item>> + Send + 'static {
                 #stream {
                     stream: Box::pin(stream),
@@ -291,12 +291,12 @@ fn bridge_stream(pieces: AstPieces) -> TokenStream {
         // Convenience wrappers so that client code doesn't have to import `IntoCxxAsyncFuture`.
         impl #stream {
             pub fn infallible<Stm>(stream: Stm) -> Self
-                    where Stm: ::cxx_async::private::Stream<Item = #item> + Send + 'static {
+                    where Stm: #trait_path<Item = #item> + Send + 'static {
                 <#stream as ::cxx_async::IntoCxxAsyncStream>::infallible(stream)
             }
 
             pub fn fallible<Stm>(stream: Stm) -> Self
-                    where Stm: ::cxx_async::private::Stream<Item =
+                    where Stm: #trait_path<Item =
                         ::cxx_async::CxxAsyncResult<#item>> + Send + 'static {
                 <#stream as ::cxx_async::IntoCxxAsyncStream>::fallible(stream)
             }
