@@ -163,6 +163,41 @@ pub use cxx_async_macro::bridge;
 #[doc(hidden)]
 pub use pin_utils::unsafe_pinned;
 
+// Replacements for macros that panic that are guaranteed to cause an abort, so that we don't unwind
+// across C++ frames.
+
+macro_rules! safe_panic {
+    ($($args:expr),*) => {
+        {
+            eprint!($($args),*);
+            eprintln!(" at {}:{}", file!(), line!());
+            ::std::process::abort();
+        }
+    }
+}
+
+#[cfg(debug_assertions)]
+macro_rules! safe_debug_assert {
+    ($cond:expr) => {
+        {
+            if !$cond {
+                eprintln!("assertion failed: {}", stringify!($cond));
+                ::std::process::abort();
+            }
+        }
+    }
+}
+#[cfg(not(debug_assertions))]
+macro_rules! safe_debug_assert {
+    ($cond:expr) => {}
+}
+
+macro_rules! safe_unreachable {
+    () => {
+        safe_panic!("unreachable code executed")
+    }
+}
+
 // Bridged glue functions.
 extern "C" {
     fn cxxasync_suspended_coroutine_clone(waker_data: *mut u8) -> *mut u8;
@@ -300,7 +335,7 @@ impl Execlet {
     fn run(&self, cx: &mut Context) {
         // Lock.
         let mut guard = self.0 .0.lock().unwrap();
-        debug_assert!(!guard.running);
+        safe_debug_assert!(!guard.running);
         guard.running = true;
 
         // Run as many tasks as we have.
@@ -535,7 +570,7 @@ impl<T> SpscChannel<T> {
         {
             let mut this = self.0.lock().unwrap();
             if this.closed {
-                panic!("Attempted to close an `SpscChannel` that's already closed!")
+                safe_panic!("Attempted to close an `SpscChannel` that's already closed!")
             }
             this.closed = true;
             waiter = this.waiter.take();
@@ -564,7 +599,7 @@ impl<T> SpscChannel<T> {
                 this.value = Some(getter());
                 waiter = this.waiter.take();
             } else if context.is_some() && this.waiter.is_some() {
-                panic!("Only one task may block on a `SpscChannel`!")
+                safe_panic!("Only one task may block on a `SpscChannel`!")
             } else {
                 if let Some(context) = context {
                     this.waiter = Some((*context.waker()).clone());
@@ -585,7 +620,7 @@ impl<T> SpscChannel<T> {
         // Drop the lock before possibly calling the waiter because we could deadlock otherwise.
         let waiter = {
             let mut this = self.0.lock().unwrap();
-            debug_assert!(this.exception.is_none());
+            safe_debug_assert!(this.exception.is_none());
             this.exception = Some(exception);
             this.waiter.take()
         };
@@ -690,7 +725,7 @@ impl<Output> Future for CxxAsyncReceiver<Output> {
             Poll::Ready(None) => {
                 // This should never happen, because a future should never be polled again after
                 // returning `Ready`.
-                panic!("Attempted to use a stream as a future!")
+                safe_panic!("Attempted to use a stream as a future!")
             }
             Poll::Pending => Poll::Pending,
         }
@@ -878,17 +913,17 @@ pub unsafe extern "C" fn sender_future_send<Item>(
     value: *const u8,
     waker_data: *const u8,
 ) -> u32 {
-    debug_assert!(waker_data.is_null());
+    safe_debug_assert!(waker_data.is_null());
 
     let this = this.0.as_mut().expect("Where's the SPSC sender?");
     match status {
         FUTURE_STATUS_COMPLETE => {
             // This is a one-shot sender, so sending must always succeed.
             let sent = this.try_send_value_with(None, || unpack_value::<Item>(value));
-            debug_assert!(sent);
+            safe_debug_assert!(sent);
         }
         FUTURE_STATUS_ERROR => this.send_exception(unpack_exception(value)),
-        _ => unreachable!(),
+        _ => safe_unreachable!(),
     }
 
     this.close();
@@ -953,7 +988,7 @@ pub unsafe extern "C" fn sender_stream_send<Item>(
             this.close();
             SEND_RESULT_FINISHED
         }
-        _ => unreachable!(),
+        _ => safe_unreachable!(),
     }
 }
 
@@ -1083,5 +1118,5 @@ pub unsafe extern "C" fn cxxasync_execlet_submit(
 #[doc(hidden)]
 pub mod private {
     pub use futures::future::BoxFuture;
-    pub use futures::stream::{BoxStream, Stream};
+    pub use futures::stream::BoxStream;
 }
