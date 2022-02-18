@@ -142,7 +142,7 @@ use std::error::Error;
 use std::ffi::CStr;
 use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::future::Future;
-use std::mem::{self, MaybeUninit};
+use std::mem::MaybeUninit;
 use std::panic::{self, AssertUnwindSafe};
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
@@ -604,8 +604,7 @@ pub unsafe extern "C" fn future_channel<Fut, Out>(
             execlet: Some(Execlet::from_raw_ref(execlet)),
         }.into(),
     };
-    ptr::copy_nonoverlapping(&oneshot, out_oneshot, 1);
-    mem::forget(oneshot);
+    ptr::write(out_oneshot, oneshot);
 }
 
 // Creates a new multi-shot sender/receiver pair for a stream.
@@ -629,8 +628,7 @@ pub unsafe extern "C" fn stream_channel<Stm, Item>(
         }
         .into(),
     };
-    ptr::copy_nonoverlapping(&stream, out_stream, 1);
-    mem::forget(stream);
+    ptr::write(out_stream, stream);
 }
 
 // C++ calls this to yield a value for a one-shot coroutine (future).
@@ -780,14 +778,12 @@ where
         let mut context = Context::from_waker(&waker);
         match this.0.poll(&mut context) {
             Poll::Ready(Ok(value)) => {
-                ptr::copy_nonoverlapping(&value, result as *mut Out, 1);
-                mem::forget(value);
+                ptr::write(result as *mut Out, value);
                 FUTURE_STATUS_COMPLETE
             }
             Poll::Ready(Err(error)) => {
                 let error = error.what().to_owned();
-                ptr::copy_nonoverlapping(&error, result as *mut String, 1);
-                mem::forget(error);
+                ptr::write(result as *mut String, error);
                 FUTURE_STATUS_ERROR
             }
             Poll::Pending => FUTURE_STATUS_PENDING,
