@@ -178,24 +178,22 @@ macro_rules! safe_panic {
 
 #[cfg(debug_assertions)]
 macro_rules! safe_debug_assert {
-    ($cond:expr) => {
-        {
-            if !$cond {
-                eprintln!("assertion failed: {}", stringify!($cond));
-                ::std::process::abort();
-            }
+    ($cond:expr) => {{
+        if !$cond {
+            eprintln!("assertion failed: {}", stringify!($cond));
+            ::std::process::abort();
         }
-    }
+    }};
 }
 #[cfg(not(debug_assertions))]
 macro_rules! safe_debug_assert {
-    ($cond:expr) => {}
+    ($cond:expr) => {};
 }
 
 macro_rules! safe_unreachable {
     () => {
         safe_panic!("unreachable code executed")
-    }
+    };
 }
 
 #[doc(hidden)]
@@ -602,7 +600,8 @@ pub unsafe extern "C" fn future_channel<Fut, Out>(
         future: CxxAsyncReceiver::<Out> {
             receiver: channel,
             execlet: Some(Execlet::from_raw_ref(execlet)),
-        }.into(),
+        }
+        .into(),
     };
     ptr::write(out_oneshot, oneshot);
 }
@@ -793,7 +792,10 @@ where
     match result {
         Ok(result) => result,
         Err(error) => {
-            eprintln!("Rust async code panicked when awaited from C++: {:?}", error);
+            eprintln!(
+                "Rust async code panicked when awaited from C++: {:?}",
+                error
+            );
             std::process::abort();
         }
     }
