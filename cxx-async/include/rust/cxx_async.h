@@ -28,110 +28,134 @@
 
 // Warning! Preprocessor abuse follows!
 
-#define CXXASYNC_ASSERT(cond) ::rust::async::cxxasync_assert(cond, #cond, __FILE__, __LINE__)
+#define CXXASYNC_ASSERT(cond) \
+  ::rust::async::cxxasync_assert(cond, #cond, __FILE__, __LINE__)
 
 // This is a hack to do variadic arguments in macros.
 // See: https://stackoverflow.com/a/3048361
 
-#define CXXASYNC_JOIN_NAMESPACE_1(a0)                              a0
-#define CXXASYNC_JOIN_NAMESPACE_2(a0, a1)                          a0::a1
-#define CXXASYNC_JOIN_NAMESPACE_3(a0, a1, a2)                      a0::a1::a2
-#define CXXASYNC_JOIN_NAMESPACE_4(a0, a1, a2, a3)                  a0::a1::a2::a3
-#define CXXASYNC_JOIN_NAMESPACE_5(a0, a1, a2, a3, a4)              a0::a1::a2::a3::a4
-#define CXXASYNC_JOIN_NAMESPACE_6(a0, a1, a2, a3, a4, a5)          a0::a1::a2::a3::a4::a5
-#define CXXASYNC_JOIN_NAMESPACE_7(a0, a1, a2, a3, a4, a5, a6)      a0::a1::a2::a3::a4::a5::a6
-#define CXXASYNC_JOIN_NAMESPACE_8(a0, a1, a2, a3, a4, a5, a6, a7)  a0::a1::a2::a3::a4::a5::a6::a7
+#define CXXASYNC_JOIN_NAMESPACE_1(a0) a0
+#define CXXASYNC_JOIN_NAMESPACE_2(a0, a1) a0::a1
+#define CXXASYNC_JOIN_NAMESPACE_3(a0, a1, a2) a0::a1::a2
+#define CXXASYNC_JOIN_NAMESPACE_4(a0, a1, a2, a3) a0::a1::a2::a3
+#define CXXASYNC_JOIN_NAMESPACE_5(a0, a1, a2, a3, a4) a0::a1::a2::a3::a4
+#define CXXASYNC_JOIN_NAMESPACE_6(a0, a1, a2, a3, a4, a5) a0::a1::a2::a3::a4::a5
+#define CXXASYNC_JOIN_NAMESPACE_7(a0, a1, a2, a3, a4, a5, a6) \
+  a0::a1::a2::a3::a4::a5::a6
+#define CXXASYNC_JOIN_NAMESPACE_8(a0, a1, a2, a3, a4, a5, a6, a7) \
+  a0::a1::a2::a3::a4::a5::a6::a7
 
-#define CXXASYNC_JOIN_DOLLAR_1(a0)                              a0
-#define CXXASYNC_JOIN_DOLLAR_2(a0, a1)                          a0##$##a1
-#define CXXASYNC_JOIN_DOLLAR_3(a0, a1, a2)                      a0##$##a1##$##a2
-#define CXXASYNC_JOIN_DOLLAR_4(a0, a1, a2, a3)                  a0##$##a1##$##a2##$##a3
-#define CXXASYNC_JOIN_DOLLAR_5(a0, a1, a2, a3, a4)              a0##$##a1##$##a2##$##a3##$##a4
-#define CXXASYNC_JOIN_DOLLAR_6(a0, a1, a2, a3, a4, a5)          a0##$##a1##$##a2##$##a3##$##a4##$##a5
-#define CXXASYNC_JOIN_DOLLAR_7(a0, a1, a2, a3, a4, a5, a6)      a0##$##a1##$##a2##$##a3##$##a4##$##a5##$##a6
-#define CXXASYNC_JOIN_DOLLAR_8(a0, a1, a2, a3, a4, a5, a6, a7)  a0##$##a1##$##a2##$##a3##$##a4##$##a5##$##a6##$##a7
+#define CXXASYNC_JOIN_DOLLAR_1(a0) a0
+#define CXXASYNC_JOIN_DOLLAR_2(a0, a1) a0##$##a1
+#define CXXASYNC_JOIN_DOLLAR_3(a0, a1, a2) a0##$##a1##$##a2
+#define CXXASYNC_JOIN_DOLLAR_4(a0, a1, a2, a3) a0##$##a1##$##a2##$##a3
+#define CXXASYNC_JOIN_DOLLAR_5(a0, a1, a2, a3, a4) \
+  a0##$##a1##$##a2##$##a3##$##a4
+#define CXXASYNC_JOIN_DOLLAR_6(a0, a1, a2, a3, a4, a5) \
+  a0##$##a1##$##a2##$##a3##$##a4##$##a5
+#define CXXASYNC_JOIN_DOLLAR_7(a0, a1, a2, a3, a4, a5, a6) \
+  a0##$##a1##$##a2##$##a3##$##a4##$##a5##$##a6
+#define CXXASYNC_JOIN_DOLLAR_8(a0, a1, a2, a3, a4, a5, a6, a7) \
+  a0##$##a1##$##a2##$##a3##$##a4##$##a5##$##a6##$##a7
 
-#define CXXASYNC_STRIP_NAMESPACE_1(a0)                              a0
-#define CXXASYNC_STRIP_NAMESPACE_2(a0, a1)                          a1
-#define CXXASYNC_STRIP_NAMESPACE_3(a0, a1, a2)                      a2
-#define CXXASYNC_STRIP_NAMESPACE_4(a0, a1, a2, a3)                  a3
-#define CXXASYNC_STRIP_NAMESPACE_5(a0, a1, a2, a3, a4)              a4
-#define CXXASYNC_STRIP_NAMESPACE_6(a0, a1, a2, a3, a4, a5)          a5
-#define CXXASYNC_STRIP_NAMESPACE_7(a0, a1, a2, a3, a4, a5, a6)      a6
-#define CXXASYNC_STRIP_NAMESPACE_8(a0, a1, a2, a3, a4, a5, a6, a7)  a7
+#define CXXASYNC_STRIP_NAMESPACE_1(a0) a0
+#define CXXASYNC_STRIP_NAMESPACE_2(a0, a1) a1
+#define CXXASYNC_STRIP_NAMESPACE_3(a0, a1, a2) a2
+#define CXXASYNC_STRIP_NAMESPACE_4(a0, a1, a2, a3) a3
+#define CXXASYNC_STRIP_NAMESPACE_5(a0, a1, a2, a3, a4) a4
+#define CXXASYNC_STRIP_NAMESPACE_6(a0, a1, a2, a3, a4, a5) a5
+#define CXXASYNC_STRIP_NAMESPACE_7(a0, a1, a2, a3, a4, a5, a6) a6
+#define CXXASYNC_STRIP_NAMESPACE_8(a0, a1, a2, a3, a4, a5, a6, a7) a7
 
 #define CXXASYNC_OPEN_NAMESPACE_1(a0)
-#define CXXASYNC_OPEN_NAMESPACE_2(a0, a1)                          namespace a0 {
-#define CXXASYNC_OPEN_NAMESPACE_3(a0, a1, a2)                      namespace a0::a1 {
-#define CXXASYNC_OPEN_NAMESPACE_4(a0, a1, a2, a3)                  namespace a0::a1::a2 {
-#define CXXASYNC_OPEN_NAMESPACE_5(a0, a1, a2, a3, a4)              namespace a0::a1::a2::a3 {
-#define CXXASYNC_OPEN_NAMESPACE_6(a0, a1, a2, a3, a4, a5)          namespace a0::a1::a2::a3::a4 {
-#define CXXASYNC_OPEN_NAMESPACE_7(a0, a1, a2, a3, a4, a5, a6)      namespace a0::a1::a2::a3::a4::a5 {
-#define CXXASYNC_OPEN_NAMESPACE_8(a0, a1, a2, a3, a4, a5, a6, a7)  namespace a0::a1::a2::a3::a4::a5::a6 {
+#define CXXASYNC_OPEN_NAMESPACE_2(a0, a1) namespace a0 {
+#define CXXASYNC_OPEN_NAMESPACE_3(a0, a1, a2) namespace a0::a1 {
+#define CXXASYNC_OPEN_NAMESPACE_4(a0, a1, a2, a3) namespace a0::a1::a2 {
+#define CXXASYNC_OPEN_NAMESPACE_5(a0, a1, a2, a3, a4) namespace a0::a1::a2::a3 {
+#define CXXASYNC_OPEN_NAMESPACE_6(a0, a1, a2, a3, a4, a5) \
+  namespace a0::a1::a2::a3::a4 {
+#define CXXASYNC_OPEN_NAMESPACE_7(a0, a1, a2, a3, a4, a5, a6) \
+  namespace a0::a1::a2::a3::a4::a5 {
+#define CXXASYNC_OPEN_NAMESPACE_8(a0, a1, a2, a3, a4, a5, a6, a7) \
+  namespace a0::a1::a2::a3::a4::a5::a6 {
 
 #define CXXASYNC_CLOSE_NAMESPACE_1(a0)
-#define CXXASYNC_CLOSE_NAMESPACE_2(a0, a1)                         }
-#define CXXASYNC_CLOSE_NAMESPACE_3(a0, a1, a2)                     }
-#define CXXASYNC_CLOSE_NAMESPACE_4(a0, a1, a2, a3)                 }
-#define CXXASYNC_CLOSE_NAMESPACE_5(a0, a1, a2, a3, a4)             }
-#define CXXASYNC_CLOSE_NAMESPACE_6(a0, a1, a2, a3, a4, a5)         }
-#define CXXASYNC_CLOSE_NAMESPACE_7(a0, a1, a2, a3, a4, a5, a6)     }
+#define CXXASYNC_CLOSE_NAMESPACE_2(a0, a1) }
+#define CXXASYNC_CLOSE_NAMESPACE_3(a0, a1, a2) }
+#define CXXASYNC_CLOSE_NAMESPACE_4(a0, a1, a2, a3) }
+#define CXXASYNC_CLOSE_NAMESPACE_5(a0, a1, a2, a3, a4) }
+#define CXXASYNC_CLOSE_NAMESPACE_6(a0, a1, a2, a3, a4, a5) }
+#define CXXASYNC_CLOSE_NAMESPACE_7(a0, a1, a2, a3, a4, a5, a6) }
 #define CXXASYNC_CLOSE_NAMESPACE_8(a0, a1, a2, a3, a4, a5, a6, a7) }
 
-// Need a level of indirection here because of https://stackoverflow.com/a/1489985
-#define CXXASYNC_CONCAT_3_IMPL(a, b, c)  a##b##c
-#define CXXASYNC_CONCAT_3(a, b, c)       CXXASYNC_CONCAT_3_IMPL(a, b, c)
+// Need a level of indirection here because of
+// https://stackoverflow.com/a/1489985
+#define CXXASYNC_CONCAT_3_IMPL(a, b, c) a##b##c
+#define CXXASYNC_CONCAT_3(a, b, c) CXXASYNC_CONCAT_3_IMPL(a, b, c)
 
-// Concatenates `prefix` to the number of variadic arguments supplied (e.g. `prefix_1`,
-// `prefix_2`, etc.)
-#define CXXASYNC_DISPATCH_VARIADIC_IMPL(prefix, unused, a0, a1, a2, a3, a4, a5, a6, a7, ...)  prefix##a7
+// Concatenates `prefix` to the number of variadic arguments supplied (e.g.
+// `prefix_1`, `prefix_2`, etc.)
+#define CXXASYNC_DISPATCH_VARIADIC_IMPL(                 \
+    prefix, unused, a0, a1, a2, a3, a4, a5, a6, a7, ...) \
+  prefix##a7
 #define CXXASYNC_DISPATCH_VARIADIC(prefix, ...) \
-    CXXASYNC_DISPATCH_VARIADIC_IMPL(prefix, __VA_ARGS__, 8, 7, 6, 5, 4, 3, 2, 1, )
+  CXXASYNC_DISPATCH_VARIADIC_IMPL(prefix, __VA_ARGS__, 8, 7, 6, 5, 4, 3, 2, 1, )
 
-#define CXXASYNC_DISPATCH_OPTIONAL_IMPL(prefix, unused, a0, a1, ...)  prefix##a1
+#define CXXASYNC_DISPATCH_OPTIONAL_IMPL(prefix, unused, a0, a1, ...) prefix##a1
 #define CXXASYNC_DISPATCH_OPTIONAL(prefix, ...) \
-    CXXASYNC_DISPATCH_OPTIONAL_IMPL(prefix, __VA_ARGS__, 1, 0, )
+  CXXASYNC_DISPATCH_OPTIONAL_IMPL(prefix, __VA_ARGS__, 1, 0, )
 
 #define CXXASYNC_JOIN_NAMESPACE(...) \
-    CXXASYNC_DISPATCH_VARIADIC(CXXASYNC_JOIN_NAMESPACE_, __VA_ARGS__)(__VA_ARGS__)
+  CXXASYNC_DISPATCH_VARIADIC(CXXASYNC_JOIN_NAMESPACE_, __VA_ARGS__)(__VA_ARGS__)
 #define CXXASYNC_JOIN_DOLLAR(...) \
-    CXXASYNC_DISPATCH_VARIADIC(CXXASYNC_JOIN_DOLLAR_, __VA_ARGS__)(__VA_ARGS__)
-#define CXXASYNC_STRIP_NAMESPACE(...) \
-    CXXASYNC_DISPATCH_VARIADIC(CXXASYNC_STRIP_NAMESPACE_, __VA_ARGS__)(__VA_ARGS__)
+  CXXASYNC_DISPATCH_VARIADIC(CXXASYNC_JOIN_DOLLAR_, __VA_ARGS__)(__VA_ARGS__)
+#define CXXASYNC_STRIP_NAMESPACE(...)                                \
+  CXXASYNC_DISPATCH_VARIADIC(CXXASYNC_STRIP_NAMESPACE_, __VA_ARGS__) \
+  (__VA_ARGS__)
 #define CXXASYNC_OPEN_NAMESPACE(...) \
-    CXXASYNC_DISPATCH_VARIADIC(CXXASYNC_OPEN_NAMESPACE_, __VA_ARGS__)(__VA_ARGS__)
-#define CXXASYNC_CLOSE_NAMESPACE(...) \
-    CXXASYNC_DISPATCH_VARIADIC(CXXASYNC_CLOSE_NAMESPACE_, __VA_ARGS__)(__VA_ARGS__)
+  CXXASYNC_DISPATCH_VARIADIC(CXXASYNC_OPEN_NAMESPACE_, __VA_ARGS__)(__VA_ARGS__)
+#define CXXASYNC_CLOSE_NAMESPACE(...)                                \
+  CXXASYNC_DISPATCH_VARIADIC(CXXASYNC_CLOSE_NAMESPACE_, __VA_ARGS__) \
+  (__VA_ARGS__)
 
-#define CXXASYNC_DEFINE_FUTURE_OR_STREAM(type, final_result_type, ...)                        \
-  CXXASYNC_OPEN_NAMESPACE(__VA_ARGS__)                                                        \
-  struct CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__);                                               \
-  extern "C" const rust::async::Vtable<CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__)>*                \
-    CXXASYNC_CONCAT_3(cxxasync_, CXXASYNC_JOIN_DOLLAR(__VA_ARGS__), _vtable)();               \
-  struct CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__) :                                              \
-      public rust::async::RustFuture<CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__)> {                 \
-    typedef type YieldResult;                                                                 \
-    typedef final_result_type FinalResult;                                                    \
-    static const auto vtable() {                                                              \
-      return CXXASYNC_CONCAT_3(cxxasync_, CXXASYNC_JOIN_DOLLAR(__VA_ARGS__), _vtable());      \
-    }                                                                                         \
-    CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__)() = delete;                                         \
-    CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__)(CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__) &) = delete;  \
-    void operator=(const CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__) &) = delete;                   \
-  public:                                                                                     \
-    CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__)(                                                    \
-        CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__) &&other) noexcept :                             \
-        rust::async::RustFuture<CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__)>(std::move(other)) {}   \
-  };                                                                                          \
-  CXXASYNC_CLOSE_NAMESPACE(__VA_ARGS__)                                                       \
-  template <typename... Args>                                                                 \
-  struct std::experimental::coroutine_traits<                                                 \
-      CXXASYNC_JOIN_NAMESPACE(__VA_ARGS__), Args...> {                                        \
-    using promise_type = rust::async::RustPromise<CXXASYNC_JOIN_NAMESPACE(__VA_ARGS__)>;      \
+#define CXXASYNC_DEFINE_FUTURE_OR_STREAM(type, final_result_type, ...)         \
+  CXXASYNC_OPEN_NAMESPACE(__VA_ARGS__)                                         \
+  struct CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__);                                \
+  extern "C" const rust::async::Vtable<CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__)>* \
+      CXXASYNC_CONCAT_3(                                                       \
+          cxxasync_, CXXASYNC_JOIN_DOLLAR(__VA_ARGS__), _vtable)();            \
+  struct CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__)                                 \
+      : public rust::async::RustFuture<CXXASYNC_STRIP_NAMESPACE(               \
+            __VA_ARGS__)> {                                                    \
+    typedef type YieldResult;                                                  \
+    typedef final_result_type FinalResult;                                     \
+    static const auto vtable() {                                               \
+      return CXXASYNC_CONCAT_3(                                                \
+          cxxasync_, CXXASYNC_JOIN_DOLLAR(__VA_ARGS__), _vtable());            \
+    }                                                                          \
+    CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__)() = delete;                          \
+    CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__)                                      \
+    (CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__) &) = delete;                        \
+    void operator=(const CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__) &) = delete;    \
+                                                                               \
+   public:                                                                     \
+    CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__)                                      \
+    (CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__) && other) noexcept                  \
+        : rust::async::RustFuture<CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__)>(      \
+              std::move(other)) {}                                             \
+  };                                                                           \
+  CXXASYNC_CLOSE_NAMESPACE(__VA_ARGS__)                                        \
+  template <typename... Args>                                                  \
+  struct std::experimental::                                                   \
+      coroutine_traits<CXXASYNC_JOIN_NAMESPACE(__VA_ARGS__), Args...> {        \
+    using promise_type =                                                       \
+        rust::async::RustPromise<CXXASYNC_JOIN_NAMESPACE(__VA_ARGS__)>;        \
   };
 
-#define CXXASYNC_DEFINE_FUTURE(type, ...) CXXASYNC_DEFINE_FUTURE_OR_STREAM(type, type, __VA_ARGS__)
-#define CXXASYNC_DEFINE_STREAM(type, ...) CXXASYNC_DEFINE_FUTURE_OR_STREAM(type, void, __VA_ARGS__)
+#define CXXASYNC_DEFINE_FUTURE(type, ...) \
+  CXXASYNC_DEFINE_FUTURE_OR_STREAM(type, type, __VA_ARGS__)
+#define CXXASYNC_DEFINE_STREAM(type, ...) \
+  CXXASYNC_DEFINE_FUTURE_OR_STREAM(type, void, __VA_ARGS__)
 
 namespace rust {
 namespace async {
@@ -165,59 +189,59 @@ struct Vtable {
 };
 
 // Abstract CRTP base class for all futures.
-template<typename Derived>
+template <typename Derived>
 class RustFuture {
-  void *m_data;
-  void *m_vtable;
+  void* m_data;
+  void* m_vtable;
 
   RustFuture() = delete;
-  RustFuture(RustFuture &) = delete;
-  void operator=(const RustFuture &) = delete;
+  RustFuture(RustFuture&) = delete;
+  void operator=(const RustFuture&) = delete;
 
-public:
-  // Needed to stop `cxx` from firing a static assert complaining about the presence of a move
-  // constructor and destructor.
+ public:
+  // Needed to stop `cxx` from firing a static assert complaining about the
+  // presence of a move constructor and destructor.
   using IsRelocatable = std::true_type;
 
-  RustFuture(RustFuture &&other) noexcept : m_data(other.m_data), m_vtable(other.m_vtable) {
+  RustFuture(RustFuture&& other) noexcept
+      : m_data(other.m_data), m_vtable(other.m_vtable) {
     other.m_data = other.m_vtable = nullptr;
   }
 
   ~RustFuture() noexcept {
     if (m_vtable != nullptr)
-      Derived::vtable()->future_drop(std::move(*static_cast<Derived *>(this)));
+      Derived::vtable()->future_drop(std::move(*static_cast<Derived*>(this)));
   }
 
   inline RustAwaiter<Derived> operator co_await() && noexcept {
     // Transfer ownership of the Rust future to the awaiter.
-    return RustAwaiter(std::move(*static_cast<Derived *>(this)));
+    return RustAwaiter(std::move(*static_cast<Derived*>(this)));
   }
 };
 
-template<typename Future, bool YieldResultIsVoid, bool FinalResultIsVoid>
+template <typename Future, bool YieldResultIsVoid, bool FinalResultIsVoid>
 struct RustFutureCoroutineTraits {
-  using promise_type = rust::async::RustPromise<Future, YieldResultIsVoid, FinalResultIsVoid>;
+  using promise_type =
+      rust::async::RustPromise<Future, YieldResultIsVoid, FinalResultIsVoid>;
 };
 
 template <typename Future>
 class RustSender {
-  void *m_ptr;
+  void* m_ptr;
 
   RustSender() = delete;
-  RustSender(RustSender &) = delete;
+  RustSender(RustSender&) = delete;
 
-public:
+ public:
   ~RustSender() {
     if (m_ptr == nullptr)
       return;
-    // Passing the wrapped pointer as though it were the sender works because `CxxAsyncSender` is
-    // marked as `#[repr(transparent)]`.
+    // Passing the wrapped pointer as though it were the sender works because
+    // `CxxAsyncSender` is marked as `#[repr(transparent)]`.
     Future::vtable()->sender_drop(m_ptr);
     m_ptr = nullptr;
   }
-  RustSender(RustSender &&other) : m_ptr(other.m_ptr) {
-    other.m_ptr = nullptr;
-  }
+  RustSender(RustSender&& other) : m_ptr(other.m_ptr) { other.m_ptr = nullptr; }
 };
 
 class SuspendedCoroutine;
@@ -236,22 +260,16 @@ class Error final : public std::exception {
       delete[] m_message;
     }
   }
-  explicit Error(const char* message) {
-    copy_from(message);
-  }
+  explicit Error(const char* message) { copy_from(message); }
   template <typename Future>
   friend class RustFutureReceiver;
 
  public:
-  Error(const Error& other) {
-    copy_from(other.m_message);
-  }
+  Error(const Error& other) { copy_from(other.m_message); }
   Error(Error&& other) noexcept : m_message(other.m_message) {
     other.m_message = nullptr;
   }
-  ~Error() noexcept override {
-    destroy();
-  }
+  ~Error() noexcept override { destroy(); }
   Error& operator=(const Error& other) {
     destroy();
     copy_from(other.m_message);
@@ -262,9 +280,7 @@ class Error final : public std::exception {
     other.m_message = nullptr;
     return *this;
   }
-  const char* what() const noexcept override {
-    return m_message;
-  }
+  const char* what() const noexcept override { return m_message; }
 };
 
 // Exception customization point. This works just like
@@ -312,7 +328,8 @@ struct TryCatch {
 
 } // namespace behavior
 
-void cxxasync_assert(bool cond, const char *message, const char *file, int line);
+void cxxasync_assert(
+    bool cond, const char* message, const char* file, int line);
 
 // Execlet API
 extern "C" {
@@ -321,7 +338,8 @@ RustExeclet* cxxasync_execlet_create();
 // Increments the reference count on an execlet.
 void cxxasync_execlet_add_ref(RustExeclet* self);
 // Decrements the reference count on an execlet and frees it if the count hits
-// zero. Returns true if the execlet is still alive after this call and false otherwise.
+// zero. Returns true if the execlet is still alive after this call and false
+// otherwise.
 bool cxxasync_execlet_release(RustExeclet* self);
 // Submit a task to the execlet. This internally bumps the reference count.
 void cxxasync_execlet_submit(RustExeclet* self, void (*run)(void*), void* task);
@@ -337,34 +355,26 @@ class Execlet {
  public:
   Execlet() : m_priv(cxxasync_execlet_create()) {}
 
-  ~Execlet() {
-    cxxasync_execlet_release(m_priv);
-  }
+  ~Execlet() { cxxasync_execlet_release(m_priv); }
 
   void submit(void* task, void (*run)(void*)) noexcept {
     cxxasync_execlet_submit(m_priv, run, task);
   }
 
-  RustExeclet* raw() {
-    return m_priv;
-  }
+  RustExeclet* raw() { return m_priv; }
 
   // Manually adds a reference to the execlet.
   //
   // Folly uses this via `FollyExeclet`.
-  void add_ref() noexcept {
-    cxxasync_execlet_add_ref(m_priv);
-  }
+  void add_ref() noexcept { cxxasync_execlet_add_ref(m_priv); }
 
   // Manually removes a reference from the execlet.
   //
-  // Returns true if the execlet is still alive after the release (i.e. the reference count is
-  // greater than zero) and false if it is dead.
+  // Returns true if the execlet is still alive after the release (i.e. the
+  // reference count is greater than zero) and false if it is dead.
   //
   // Folly uses this via `FollyExeclet`.
-  bool release() noexcept {
-    return cxxasync_execlet_release(m_priv);
-  }
+  bool release() noexcept { return cxxasync_execlet_release(m_priv); }
 };
 
 enum class FuturePollStatus {
@@ -518,9 +528,7 @@ class RustAwaiter {
 
   bool await_suspend(std::experimental::coroutine_handle<void> next);
 
-  YieldResult&& await_resume() {
-    return m_receiver->get_result();
-  }
+  YieldResult&& await_resume() { return m_receiver->get_result(); }
 };
 
 template <typename Future>
@@ -542,9 +550,7 @@ class RustStreamAwaiter {
   RustStreamAwaiter(RustSender<Future>& sender, YieldResult&& value)
       : m_sender(sender), m_value(std::move(value)) {}
 
-  bool await_ready() noexcept {
-    return false;
-  }
+  bool await_ready() noexcept { return false; }
   bool await_suspend(std::experimental::coroutine_handle<void> next);
   void await_resume() {}
 };
@@ -568,14 +574,11 @@ class CoroutineHandleContinuation : public Continuation {
   std::experimental::coroutine_handle<void> m_next;
 
  public:
-  explicit CoroutineHandleContinuation(std::experimental::coroutine_handle<void>&& next)
+  explicit CoroutineHandleContinuation(
+      std::experimental::coroutine_handle<void>&& next)
       : m_next(next) {}
-  void resume() override {
-    m_next.resume();
-  }
-  void destroy() override {
-    m_next.destroy();
-  }
+  void resume() override { m_next.resume(); }
+  void destroy() override { m_next.destroy(); }
 };
 
 // Wrapper object that encapsulates a suspended coroutine. This is the waker
@@ -593,9 +596,7 @@ class SuspendedCoroutine {
   std::unique_ptr<Continuation> m_next;
   WakeFn m_wake_fn;
 
-  void forget_coroutine_handle() {
-    m_next.reset();
-  }
+  void forget_coroutine_handle() { m_next.reset(); }
 
  public:
   SuspendedCoroutine(std::unique_ptr<Continuation>&& next, WakeFn&& wake_fn)
@@ -622,9 +623,7 @@ class SuspendedCoroutine {
   }
 
   // Does not consume the `this` reference.
-  FutureWakeStatus wake() {
-    return m_wake_fn(this);
-  }
+  FutureWakeStatus wake() { return m_wake_fn(this); }
 
   // Performs the initial poll needed when we go to sleep for the first time.
   // Returns true if we should go to sleep and false otherwise.
@@ -668,21 +667,16 @@ class RustPromiseBase {
   Channel m_channel;
 
  public:
-  RustPromiseBase() : m_execlet(), m_channel(Future::vtable()->channel(m_execlet.raw())) {}
+  RustPromiseBase()
+      : m_execlet(), m_channel(Future::vtable()->channel(m_execlet.raw())) {}
 
-  Future get_return_object() noexcept {
-    return std::move(m_channel.future);
-  }
+  Future get_return_object() noexcept { return std::move(m_channel.future); }
 
   std::experimental::suspend_never initial_suspend() const noexcept {
     return {};
   }
-  std::experimental::suspend_never final_suspend() const noexcept {
-    return {};
-  }
-  std::experimental::coroutine_handle<> unhandled_done() noexcept {
-    return {};
-  }
+  std::experimental::suspend_never final_suspend() const noexcept { return {}; }
+  std::experimental::coroutine_handle<> unhandled_done() noexcept { return {}; }
 
   void unhandled_exception() noexcept {
     behavior::TryCatch<Future, behavior::Custom>::trycatch(
@@ -697,9 +691,7 @@ class RustPromiseBase {
         });
   }
 
-  Execlet& execlet() noexcept {
-    return m_execlet;
-  }
+  Execlet& execlet() noexcept { return m_execlet; }
 
   // Customization point for library integration (e.g. Folly).
   template <
@@ -731,7 +723,8 @@ class RustStreamPromiseBase<Future, false> : public RustPromiseBase<Future> {
   using YieldResult = typename Future::YieldResult;
 
  public:
-  RustStreamAwaiter<Future> yield_value(typename Future::YieldResult&& value) noexcept {
+  RustStreamAwaiter<Future> yield_value(
+      typename Future::YieldResult&& value) noexcept {
     return RustStreamAwaiter(this->m_channel.sender, std::move(value));
   }
 };
@@ -742,8 +735,10 @@ class RustStreamPromiseBase<Future, true> : public RustPromiseBase<Future> {};
 
 template <
     typename Future,
-    bool YieldResultIsVoid = std::is_same<typename Future::YieldResult, void>::value,
-    bool FinalResultIsVoid = std::is_same<typename Future::FinalResult, void>::value>
+    bool YieldResultIsVoid =
+        std::is_same<typename Future::YieldResult, void>::value,
+    bool FinalResultIsVoid =
+        std::is_same<typename Future::FinalResult, void>::value>
 class RustPromise final
     : public RustStreamPromiseBase<Future, YieldResultIsVoid> {};
 
@@ -831,8 +826,8 @@ inline FutureWakeStatus RustStreamAwaiter<Future>::poll_next(
     SuspendedCoroutine* coroutine) noexcept {
   RustFutureResult<YieldResult> result;
   new (&result.m_result) YieldResult(std::move(m_value));
-  RustSendResult send_result = static_cast<RustSendResult>(
-      Future::vtable()->sender_send(
+  RustSendResult send_result =
+      static_cast<RustSendResult>(Future::vtable()->sender_send(
           this->m_sender,
           static_cast<uint32_t>(FuturePollStatus::Running),
           reinterpret_cast<const uint8_t*>(&result),

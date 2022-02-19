@@ -18,7 +18,8 @@
 namespace rust {
 namespace async {
 
-void cxxasync_assert(bool cond, const char *message, const char *file, int line) {
+void cxxasync_assert(
+    bool cond, const char* message, const char* file, int line) {
   if (!cond) {
     fprintf(stderr, "assertion failed: %s at %s:%d\n", message, file, line);
     abort();
