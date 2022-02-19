@@ -36,15 +36,14 @@ extern "C" inline void execlet_run_task(void* task_ptr) {
 
 // Folly-specific interface to execlets.
 class FollyExeclet : public folly::Executor {
-  std::atomic_size_t m_refcount;
   Execlet& m_rust_execlet;
 
   FollyExeclet(const FollyExeclet&) = delete;
   FollyExeclet& operator=(const FollyExeclet&) = delete;
 
  public:
-  FollyExeclet(Execlet& rust_execlet)
-      : m_refcount(0), m_rust_execlet(rust_execlet) {}
+  FollyExeclet(Execlet& rust_execlet) : m_rust_execlet(rust_execlet) {}
+
   Execlet& rust_execlet() {
     return m_rust_execlet;
   }
@@ -55,12 +54,13 @@ class FollyExeclet : public folly::Executor {
   }
 
   virtual bool keepAliveAcquire() noexcept {
-    m_refcount++;
+    m_rust_execlet.add_ref();
     return true;
   }
 
   virtual void keepAliveRelease() noexcept {
-    if (m_refcount.fetch_sub(1) == 1)
+    // Decrement the reference count and destroys this wrapper if the execlet is now dead.
+    if (!m_rust_execlet.release())
       delete this;
   }
 };

@@ -318,9 +318,11 @@ void cxxasync_assert(bool cond);
 extern "C" {
 // Creates a new execlet.
 RustExeclet* cxxasync_execlet_create();
+// Increments the reference count on an execlet.
+void cxxasync_execlet_add_ref(RustExeclet* self);
 // Decrements the reference count on an execlet and frees it if the count hits
-// zero.
-void cxxasync_execlet_release(RustExeclet* self);
+// zero. Returns true if the execlet is still alive after this call and false otherwise.
+bool cxxasync_execlet_release(RustExeclet* self);
 // Submit a task to the execlet. This internally bumps the reference count.
 void cxxasync_execlet_submit(RustExeclet* self, void (*run)(void*), void* task);
 }
@@ -345,6 +347,23 @@ class Execlet {
 
   RustExeclet* raw() {
     return m_priv;
+  }
+
+  // Manually adds a reference to the execlet.
+  //
+  // Folly uses this via `FollyExeclet`.
+  void add_ref() noexcept {
+    cxxasync_execlet_add_ref(m_priv);
+  }
+
+  // Manually removes a reference from the execlet.
+  //
+  // Returns true if the execlet is still alive after the release (i.e. the reference count is
+  // greater than zero) and false if it is dead.
+  //
+  // Folly uses this via `FollyExeclet`.
+  bool release() noexcept {
+    return cxxasync_execlet_release(m_priv);
   }
 };
 
