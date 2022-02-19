@@ -140,7 +140,7 @@ use futures::{Stream, StreamExt};
 use std::convert::From;
 use std::error::Error;
 use std::ffi::CStr;
-use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use std::future::Future;
 use std::os::raw::c_char;
 use std::panic::{self, AssertUnwindSafe};
@@ -207,6 +207,21 @@ impl<T> SafeExpect for Option<T> {
         match self {
             Some(value) => value,
             None => safe_panic!("{}", message),
+        }
+    }
+}
+
+trait SafeUnwrap {
+    type Output;
+    fn safe_unwrap(self) -> Self::Output;
+}
+
+impl<T, E> SafeUnwrap for Result<T, E> where E: Debug {
+    type Output = T;
+    fn safe_unwrap(self) -> Self::Output {
+        match self {
+            Ok(value) => value,
+            Err(error) => safe_panic!("unexpected Result::Err: {:?}", error),
         }
     }
 }
@@ -348,7 +363,7 @@ impl<T> SpscChannel<T> {
         // Drop the lock before possibly calling the waiter because we could deadlock otherwise.
         let waiter;
         {
-            let mut this = self.0.lock().unwrap();
+            let mut this = self.0.lock().safe_unwrap();
             if this.closed {
                 safe_panic!("Attempted to close an `SpscChannel` that's already closed!")
             }
@@ -374,7 +389,7 @@ impl<T> SpscChannel<T> {
         // Drop the lock before possibly calling the waiter because we could deadlock otherwise.
         let waiter;
         {
-            let mut this = self.0.lock().unwrap();
+            let mut this = self.0.lock().safe_unwrap();
             if this.value.is_none() {
                 this.value = Some(getter());
                 waiter = this.waiter.take();
@@ -399,7 +414,7 @@ impl<T> SpscChannel<T> {
     fn send_exception(&self, exception: CxxAsyncException) {
         // Drop the lock before possibly calling the waiter because we could deadlock otherwise.
         let waiter = {
-            let mut this = self.0.lock().unwrap();
+            let mut this = self.0.lock().safe_unwrap();
             safe_debug_assert!(this.exception.is_none());
             this.exception = Some(exception);
             this.waiter.take()
@@ -417,7 +432,7 @@ impl<T> SpscChannel<T> {
         // Drop the lock before possibly calling the waiter because we could deadlock otherwise.
         let (result, waiter);
         {
-            let mut this = self.0.lock().unwrap();
+            let mut this = self.0.lock().safe_unwrap();
             match this.value.take() {
                 Some(value) => {
                     result = Ok(value);
@@ -527,7 +542,7 @@ impl<Item> Drop for CxxAsyncReceiver<Item> {
             Some(ref execlet) => execlet,
             None => return,
         };
-        let receiver = self.receiver.0.lock().unwrap();
+        let receiver = self.receiver.0.lock().safe_unwrap();
         if receiver.closed {
             return;
         }

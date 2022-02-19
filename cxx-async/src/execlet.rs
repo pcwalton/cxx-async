@@ -13,11 +13,13 @@
 //
 // This is needed by the Folly backend, to allow awaiting semifutures.
 
+use crate::SafeUnwrap;
 use once_cell::sync::OnceCell;
 use std::collections::VecDeque;
+use std::mem;
 use std::sync::{Arc, Condvar, Mutex, Weak};
 use std::task::{Context, RawWaker, RawWakerVTable, Waker};
-use std::{mem, thread};
+use std::thread;
 
 // Allows the Rust polling interface to drive C++ tasks to completion.
 //
@@ -61,7 +63,7 @@ impl Execlet {
     // Runs all tasks in the runqueue to completion.
     pub(crate) fn run(&self, cx: &mut Context) {
         // Lock.
-        let mut guard = self.0 .0.lock().unwrap();
+        let mut guard = self.0 .0.lock().safe_unwrap();
         safe_debug_assert!(!guard.running);
         guard.running = true;
 
@@ -75,7 +77,7 @@ impl Execlet {
                 task.run();
             }
             // Re-acquire the lock.
-            guard = self.0 .0.lock().unwrap();
+            guard = self.0 .0.lock().safe_unwrap();
         }
 
         // Unlock.
@@ -84,7 +86,7 @@ impl Execlet {
 
     // Submits a task to this execlet.
     fn submit(&self, task: ExecletTask) {
-        let mut this = self.0 .0.lock().unwrap();
+        let mut this = self.0 .0.lock().safe_unwrap();
         this.runqueue.push_back(task);
         if !this.running {
             if let Some(ref waker) = this.waker {
@@ -161,7 +163,7 @@ impl ExecletReaper {
     }
 
     pub(crate) fn add(&self, execlet: Execlet) {
-        let mut execlets = self.execlets.lock().unwrap();
+        let mut execlets = self.execlets.lock().safe_unwrap();
         execlets.new.push(execlet.downgrade());
 
         // Go ahead and start running the execlet if the reaper is sleeping. This makes sure that
@@ -183,9 +185,9 @@ impl ExecletReaper {
 
     fn run(self: Arc<Self>) {
         loop {
-            let mut execlets = self.execlets.lock().unwrap();
+            let mut execlets = self.execlets.lock().safe_unwrap();
             while execlets.is_empty() {
-                execlets = self.cond.wait(execlets).unwrap();
+                execlets = self.cond.wait(execlets).safe_unwrap();
             }
 
             let execlets_to_process = execlets.take();
@@ -199,7 +201,7 @@ impl ExecletReaper {
                         .into_raw(),
                     )));
                 }
-                execlets = self.execlets.lock().unwrap();
+                execlets = self.execlets.lock().safe_unwrap();
                 execlets.old.push(execlet);
             }
         }
@@ -291,9 +293,9 @@ pub unsafe extern "C" fn cxxasync_execlet_create() -> *const RustExeclet {
 #[no_mangle]
 #[doc(hidden)]
 pub unsafe extern "C" fn cxxasync_execlet_add_ref(this: *mut RustExeclet) {
-    let execlet = Execlet::from_raw_ref(this);  // +1; ref count is now +1
-    mem::forget(execlet.clone());               // +1; ref count is now +2
-                                                // -1; ref count is now +1
+    let execlet = Execlet::from_raw_ref(this); // +1; ref count is now +1
+    mem::forget(execlet.clone()); // +1; ref count is now +2
+                                  // -1; ref count is now +1
 }
 
 // C++ calls this to decrement the reference count on an execlet and free it if the count hits zero.
@@ -301,7 +303,7 @@ pub unsafe extern "C" fn cxxasync_execlet_add_ref(this: *mut RustExeclet) {
 #[doc(hidden)]
 pub unsafe extern "C" fn cxxasync_execlet_release(this: *mut RustExeclet) -> bool {
     let execlet = Execlet::from_raw(this);
-    Arc::strong_count(&execlet.0) > 1   // Also destroys the execlet reference.
+    Arc::strong_count(&execlet.0) > 1 // Also destroys the execlet reference.
 }
 
 // C++ calls this to submit a task to the execlet. This internally bumps the reference count.
