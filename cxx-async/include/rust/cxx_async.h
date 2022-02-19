@@ -28,7 +28,7 @@
 
 // Warning! Preprocessor abuse follows!
 
-#define CXXASYNC_ASSERT(cond) ::rust::async::cxxasync_assert(cond)
+#define CXXASYNC_ASSERT(cond) ::rust::async::cxxasync_assert(cond, #cond, __FILE__, __LINE__)
 
 // This is a hack to do variadic arguments in macros.
 // See: https://stackoverflow.com/a/3048361
@@ -312,7 +312,7 @@ struct TryCatch {
 
 } // namespace behavior
 
-void cxxasync_assert(bool cond);
+void cxxasync_assert(bool cond, const char *message, const char *file, int line);
 
 // Execlet API
 extern "C" {
