@@ -196,6 +196,21 @@ macro_rules! safe_unreachable {
     };
 }
 
+trait SafeExpect {
+    type Output;
+    fn safe_expect(self, message: &str) -> Self::Output;
+}
+
+impl<T> SafeExpect for Option<T> {
+    type Output = T;
+    fn safe_expect(self, message: &str) -> T {
+        match self {
+            Some(value) => value,
+            None => safe_panic!("{}", message),
+        }
+    }
+}
+
 #[doc(hidden)]
 pub mod execlet;
 
@@ -656,7 +671,7 @@ pub unsafe extern "C" fn sender_future_send<Item>(
 ) -> u32 {
     safe_debug_assert!(waker_data.is_null());
 
-    let this = this.0.as_mut().expect("Where's the SPSC sender?");
+    let this = this.0.as_mut().safe_expect("Where's the SPSC sender?");
     match status {
         FUTURE_STATUS_COMPLETE => {
             // This is a one-shot sender, so sending must always succeed.
@@ -710,7 +725,7 @@ pub unsafe extern "C" fn sender_stream_send<Item>(
         context = Some(Context::from_waker(&waker));
     }
 
-    let this = this.0.as_mut().expect("Where's the SPSC sender?");
+    let this = this.0.as_mut().safe_expect("Where's the SPSC sender?");
     match status {
         FUTURE_STATUS_COMPLETE => {
             this.close();
