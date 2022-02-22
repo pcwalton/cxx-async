@@ -37,15 +37,13 @@ Now, inside your `#[cxx::bridge]` module, declare a future type and some methods
 ```rust
 #[cxx::bridge]
 mod ffi {
-    // Give each future type that you want to bridge a name.
-    extern "Rust" {
-        type RustFutureString;
-    }
-
-    // Async C++ methods that you wish Rust to call go here. Make sure they return one of the boxed
-    // future types you declared above.
+    // Declare type aliases for each of the future types you wish to use here. Then declare
+    // async C++ methods that you wish Rust to call. Make sure they return one of the future
+    // types you declared.
     unsafe extern "C++" {
-        fn hello_from_cpp() -> Box<RustFutureString>;
+        type RustFutureString = crate::RustFutureString;
+
+        fn hello_from_cpp() -> RustFutureString;
     }
 
     // Async Rust methods that you wish C++ to call go here. Again, make sure they return one of the
@@ -61,6 +59,7 @@ attribute:
 
 ```rust
 // The inner type is the Rust type that this future yields.
+#[cxx_async::bridge]
 unsafe impl Future for RustFutureString {
     type Output = String;
 }
@@ -77,16 +76,17 @@ Now, in your C++ file, make sure to `#include` the right headers:
 And add a call to the `CXXASYNC_DEFINE_FUTURE` macro to define the C++ side of the future:
 
 ```cpp
-// The first argument is the name you gave the future, and the second argument is the corresponding
-// C++ type. The latter is the C++ type that `cxx` maps your Rust type to: in this case, `String`
-// maps to `rust::String`, so we supply `rust::String` here.
-CXXASYNC_DEFINE_FUTURE(RustFutureString, rust::String);
+// The first argument is the name you gave the future, and the second argument is the
+// corresponding C++ type, with `::` namespace separators replaced with commas. The latter is
+// the C++ type that `cxx` maps your Rust type to: in this case, `String` maps to
+// `rust::String`, so we supply `rust, String` here.
+CXXASYNC_DEFINE_FUTURE(RustFutureString, rust, String);
 ```
 
 You're all set! Now you can define asynchronous C++ code that Rust can call:
 
 ```cpp
-rust::Box<RustFutureString> hello_from_cpp() {
+RustFutureString hello_from_cpp() {
     co_return std::string("Hello world!");
 }
 ```
@@ -105,7 +105,7 @@ And likewise, define some asynchronous Rust code that C++ can call:
 
 ```rust
 use cxx_async::CxxAsyncResult;
-fn hello_from_rust() -> Box<RustFutureString> {
+fn hello_from_rust() -> RustFutureString {
     // You can instead use `fallible` if your async block returns a Result.
     RustFutureString::infallible(async { "Hello world!".to_owned() })
 }
