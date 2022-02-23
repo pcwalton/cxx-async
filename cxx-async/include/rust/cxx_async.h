@@ -12,11 +12,16 @@
 #ifndef RUST_CXX_ASYNC_H
 #define RUST_CXX_ASYNC_H
 
+#ifdef CXXASYNC_HAVE_COROUTINE_HEADER
+#include <coroutine>
+#else
+#include <experimental/coroutine>
+#endif
+
 #include <atomic>
 #include <cstdint>
 #include <cstring>
 #include <exception>
-#include <experimental/coroutine>
 #include <functional>
 #include <memory>
 #include <mutex>
@@ -118,6 +123,12 @@
   CXXASYNC_DISPATCH_VARIADIC(CXXASYNC_CLOSE_NAMESPACE_, __VA_ARGS__) \
   (__VA_ARGS__)
 
+#ifdef CXXASYNC_HAVE_COROUTINE_HEADER
+#define CXXASYNC_COROUTINE_TRAITS   std::coroutine_traits
+#else
+#define CXXASYNC_COROUTINE_TRAITS   std::experimental::coroutine_traits
+#endif
+
 #define CXXASYNC_DEFINE_FUTURE_OR_STREAM(type, final_result_type, ...)         \
   CXXASYNC_OPEN_NAMESPACE(__VA_ARGS__)                                         \
   struct CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__);                                \
@@ -146,8 +157,8 @@
   };                                                                           \
   CXXASYNC_CLOSE_NAMESPACE(__VA_ARGS__)                                        \
   template <typename... Args>                                                  \
-  struct std::experimental::                                                   \
-      coroutine_traits<CXXASYNC_JOIN_NAMESPACE(__VA_ARGS__), Args...> {        \
+  struct CXXASYNC_COROUTINE_TRAITS<                                            \
+      CXXASYNC_JOIN_NAMESPACE(__VA_ARGS__), Args...> {                         \
     using promise_type =                                                       \
         rust::async::RustPromise<CXXASYNC_JOIN_NAMESPACE(__VA_ARGS__)>;        \
   };
@@ -159,6 +170,16 @@
 
 namespace rust {
 namespace async {
+
+#ifdef CXXASYNC_HAVE_COROUTINE_HEADER
+template<typename T = void>
+using CoroutineHandle = std::coroutine_handle<T>;
+typedef std::suspend_never SuspendNever;
+#else
+template<typename T = void>
+using CoroutineHandle = std::experimental::coroutine_handle<T>;
+typedef std::experimental::suspend_never SuspendNever;
+#endif
 
 template <typename Future>
 struct Vtable;
@@ -526,7 +547,7 @@ class RustAwaiter {
     return false;
   }
 
-  bool await_suspend(std::experimental::coroutine_handle<void> next);
+  bool await_suspend(CoroutineHandle<void> next);
 
   YieldResult&& await_resume() { return m_receiver->get_result(); }
 };
@@ -551,12 +572,11 @@ class RustStreamAwaiter {
       : m_sender(sender), m_value(std::move(value)) {}
 
   bool await_ready() noexcept { return false; }
-  bool await_suspend(std::experimental::coroutine_handle<void> next);
+  bool await_suspend(CoroutineHandle<void> next);
   void await_resume() {}
 };
 
-// This is like `std::experimental::coroutine_handle<void>`, but it doesn't
-// *have* to be a coroutine handle.
+// This is like `CoroutineHandle<void>`, but it doesn't *have* to be a coroutine handle.
 class Continuation {
   Continuation(const Continuation&) = delete;
   void operator=(const Continuation&) = delete;
@@ -571,12 +591,10 @@ class Continuation {
 };
 
 class CoroutineHandleContinuation : public Continuation {
-  std::experimental::coroutine_handle<void> m_next;
+  CoroutineHandle<void> m_next;
 
  public:
-  explicit CoroutineHandleContinuation(
-      std::experimental::coroutine_handle<void>&& next)
-      : m_next(next) {}
+  explicit CoroutineHandleContinuation(CoroutineHandle<void>&& next) : m_next(next) {}
   void resume() override { m_next.resume(); }
   void destroy() override { m_next.destroy(); }
 };
@@ -672,11 +690,9 @@ class RustPromiseBase {
 
   Future get_return_object() noexcept { return std::move(m_channel.future); }
 
-  std::experimental::suspend_never initial_suspend() const noexcept {
-    return {};
-  }
-  std::experimental::suspend_never final_suspend() const noexcept { return {}; }
-  std::experimental::coroutine_handle<> unhandled_done() noexcept { return {}; }
+  SuspendNever initial_suspend() const noexcept { return {}; }
+  SuspendNever final_suspend() const noexcept { return {}; }
+  CoroutineHandle<> unhandled_done() noexcept { return {}; }
 
   void unhandled_exception() noexcept {
     behavior::TryCatch<Future, behavior::Custom>::trycatch(
@@ -792,8 +808,7 @@ FutureWakeStatus RustFutureReceiver<Future>::wake(
 }
 
 template <typename Future>
-inline bool RustAwaiter<Future>::await_suspend(
-    std::experimental::coroutine_handle<void> next) {
+inline bool RustAwaiter<Future>::await_suspend(CoroutineHandle<void> next) {
   std::weak_ptr<RustFutureReceiver<Future>> weak_receiver = m_receiver;
   SuspendedCoroutine* coroutine = new SuspendedCoroutine(
       std::make_unique<CoroutineHandleContinuation>(std::move(next)),
@@ -811,8 +826,7 @@ inline bool RustAwaiter<Future>::await_suspend(
 }
 
 template <typename Future>
-inline bool RustStreamAwaiter<Future>::await_suspend(
-    std::experimental::coroutine_handle<void> next) {
+inline bool RustStreamAwaiter<Future>::await_suspend(CoroutineHandle<void> next) {
   SuspendedCoroutine* coroutine = new SuspendedCoroutine(
       std::make_unique<CoroutineHandleContinuation>(std::move(next)),
       [=](SuspendedCoroutine* coroutine) {
