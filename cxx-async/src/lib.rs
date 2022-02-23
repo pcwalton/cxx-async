@@ -84,11 +84,15 @@
 //! the future:
 //!
 //! ```cpp
-//! // The first argument is the name you gave the future, and the second argument is the
-//! // corresponding C++ type, with `::` namespace separators replaced with commas. The latter is
-//! // the C++ type that `cxx` maps your Rust type to: in this case, `String` maps to
-//! // `rust::String`, so we supply `rust, String` here.
-//! CXXASYNC_DEFINE_FUTURE(RustFutureString, rust, String);
+//! // The first argument is the C++ type that the future yields, and the second argument is the
+//! // fully-qualified name of the future, with `::` namespace separators replaced with commas. (For
+//! // instance, if your future is named `mycompany::myproject::RustFutureString`, you might write
+//! // `CXXASYNC_DEFINE_FUTURE(rust::String, mycompany, myproject, RustFutureString);`. The first
+//! // argument is the C++ type that `cxx` maps your Rust type to: in this case, `String` maps to
+//! // `rust::String`, so we supply `rust::String` here.
+//!
+//! // This macro must be invoked at the top level, not in a namespace.
+//! CXXASYNC_DEFINE_FUTURE(rust::String, RustFutureString);
 //! ```
 //!
 //! You're all set! Now you can define asynchronous C++ code that Rust can call:
