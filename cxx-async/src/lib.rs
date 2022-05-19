@@ -64,7 +64,7 @@
 //! After the `#[cxx::bridge]` block, define the future types using the
 //! `#[cxx_async::bridge]` attribute:
 //!
-//! ```
+//! ```ignore
 //! // The `Output` type is the Rust type that this future yields.
 //! #[cxx_async::bridge]
 //! unsafe impl Future for RustFutureString {
