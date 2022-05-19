@@ -146,9 +146,11 @@ use std::error::Error;
 use std::ffi::CStr;
 use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
 use std::future::Future;
+use std::io::{self, Write};
 use std::os::raw::c_char;
 use std::panic::{self, AssertUnwindSafe};
 use std::pin::Pin;
+use std::process;
 use std::ptr;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
@@ -173,8 +175,9 @@ pub use pin_utils::unsafe_pinned;
 macro_rules! safe_panic {
     ($($args:expr),*) => {
         {
-            eprint!($($args),*);
-            eprintln!(" at {}:{}", file!(), line!());
+            use ::std::io::Write;
+            drop(write!(::std::io::stderr(), $($args),*));
+            drop(write!(::std::io::stderr(), " at {}:{}", file!(), line!()));
             ::std::process::abort();
         }
     }
@@ -183,8 +186,13 @@ macro_rules! safe_panic {
 #[cfg(debug_assertions)]
 macro_rules! safe_debug_assert {
     ($cond:expr) => {{
+        use ::std::io::Write;
         if !$cond {
-            eprintln!("assertion failed: {}", stringify!($cond));
+            drop(write!(
+                ::std::io::stderr(),
+                "assertion failed: {}",
+                stringify!($cond)
+            ));
             ::std::process::abort();
         }
     }};
@@ -824,11 +832,12 @@ where
     match result {
         Ok(result) => result,
         Err(error) => {
-            eprintln!(
+            drop(write!(
+                io::stderr(),
                 "Rust async code panicked when awaited from C++: {:?}",
                 error
-            );
-            std::process::abort();
+            ));
+            process::abort();
         }
     }
 }
