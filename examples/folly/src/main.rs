@@ -168,7 +168,7 @@ fn test_rust_calling_cpp_synchronously_futures() {
         75719554055754070000000.0
     );
     assert_eq!(
-        executor::block_on(ffi::folly_get_namespaced_string()).unwrap(),
+        executor::block_on(ffi::folly_get_namespaced_string()).unwrap().namespaced_string,
         "hello world"
     );
 }
