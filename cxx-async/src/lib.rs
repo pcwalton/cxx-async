@@ -220,7 +220,10 @@ trait SafeUnwrap {
     fn safe_unwrap(self) -> Self::Output;
 }
 
-impl<T, E> SafeUnwrap for Result<T, E> where E: Debug {
+impl<T, E> SafeUnwrap for Result<T, E>
+where
+    E: Debug,
+{
     type Output = T;
     fn safe_unwrap(self) -> Self::Output {
         match self {
