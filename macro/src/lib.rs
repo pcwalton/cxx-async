@@ -24,7 +24,7 @@ use syn::{
 
 /// Defines a future or stream type that can be awaited from both Rust and C++.
 ///
-/// The syntax to use is:
+/// Invoke this macro like so:
 ///
 /// ```ignore
 /// #[cxx_async::bridge]
@@ -56,6 +56,16 @@ use syn::{
 ///     type Output = String;
 /// }
 /// ```
+///
+/// ## Safety
+///
+/// It's the programmer's responsibility to ensure that the specified `Output` type correctly
+/// reflects the type of the value that any returned C++ future resolves to. `cxx_async` can't
+/// currently check to ensure that these types match. If the types don't match, undefined behavior
+/// can result. See the [cxx documentation] for information on the mapping between Rust types and
+/// C++ types.
+///
+/// [cxx documentation]: https://cxx.rs/bindings.html
 #[proc_macro_attribute]
 pub fn bridge(attribute: TokenStream, item: TokenStream) -> TokenStream {
     match AstPieces::from_token_streams(attribute, item) {
@@ -211,6 +221,16 @@ fn bridge_future(pieces: AstPieces) -> TokenStream {
 ///     type Item = String;
 /// }
 /// ```
+///
+/// ## Safety
+///
+/// It's the programmer's responsibility to ensure that the specified `Output` type correctly
+/// reflects the type of the values that any returned C++ streams resolves to. `cxx_async` can't
+/// currently check to ensure that these types match. If the types don't match, undefined behavior
+/// can result. See the [cxx documentation] for information on the mapping between Rust types and
+/// C++ types.
+///
+/// [cxx documentation]: https://cxx.rs/bindings.html
 fn bridge_stream(pieces: AstPieces) -> TokenStream {
     let AstPieces {
         bridge_trait: _,

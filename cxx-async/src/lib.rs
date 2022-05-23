@@ -71,8 +71,12 @@
 //!     type Output = String;
 //! }
 //! ```
+//! 
+//! Note that it's your responsibility to ensure that the type you specify for Output actually
+//! matches the type of the value that your future resolves to. Otherwise, undefined behavior can
+//! result.
 //!
-//! Now, in your C++ header, make sure to `#include` the right headers:
+//! Next, in your C++ header, make sure to `#include` the right headers:
 //!
 //! ```cpp
 //! #include "rust/cxx.h"
@@ -95,7 +99,7 @@
 //! CXXASYNC_DEFINE_FUTURE(rust::String, RustFutureString);
 //! ```
 //!
-//! You're all set! Now you can define asynchronous C++ code that Rust can call:
+//! You're done! Now you can define asynchronous C++ code that Rust can call:
 //!
 //! ```cpp
 //! RustFutureString hello_from_cpp() {
@@ -131,7 +135,7 @@
 //! }
 //! ```
 //!
-//! That's it! You should now be able to freely await futures on either side.
+//! In this way, you should now be able to freely await futures on either side.
 //!
 //! [C++20 coroutines]: https://en.cppreference.com/w/cpp/language/coroutines
 
