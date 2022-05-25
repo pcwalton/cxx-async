@@ -71,7 +71,7 @@
 //!     type Output = String;
 //! }
 //! ```
-//! 
+//!
 //! Note that it's your responsibility to ensure that the type you specify for Output actually
 //! matches the type of the value that your future resolves to. Otherwise, undefined behavior can
 //! result.
