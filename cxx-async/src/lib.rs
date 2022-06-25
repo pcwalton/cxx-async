@@ -141,6 +141,7 @@
 
 #![warn(missing_docs)]
 
+#[cfg(built_with_cargo)]
 extern crate link_cplusplus;
 
 use crate::execlet::{Execlet, ExecletReaper, RustExeclet};
