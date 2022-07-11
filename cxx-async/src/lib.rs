@@ -817,10 +817,9 @@ where
         &CXXASYNC_WAKER_VTABLE,
     ));
 
-    let this = AssertUnwindSafe(this);
-    let result = panic::catch_unwind(move || {
+    let result = panic::catch_unwind(AssertUnwindSafe(move || {
         let mut context = Context::from_waker(&waker);
-        match this.0.poll(&mut context) {
+        match this.poll(&mut context) {
             Poll::Ready(Ok(value)) => {
                 ptr::write(result as *mut Out, value);
                 FUTURE_STATUS_COMPLETE
@@ -832,7 +831,7 @@ where
             }
             Poll::Pending => FUTURE_STATUS_PENDING,
         }
-    });
+    }));
 
     match result {
         Ok(result) => result,
