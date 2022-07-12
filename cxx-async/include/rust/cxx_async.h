@@ -252,7 +252,9 @@ class RustSender {
     Future::vtable()->sender_drop(m_ptr);
     m_ptr = nullptr;
   }
-  RustSender(RustSender&& other) : m_ptr(other.m_ptr) { other.m_ptr = nullptr; }
+  RustSender(RustSender&& other) : m_ptr(other.m_ptr) {
+    other.m_ptr = nullptr;
+  }
 };
 
 class SuspendedCoroutine;
@@ -271,16 +273,22 @@ class Error final : public std::exception {
       delete[] m_message;
     }
   }
-  explicit Error(const char* message) { copy_from(message); }
+  explicit Error(const char* message) {
+    copy_from(message);
+  }
   template <typename Future>
   friend class RustFutureReceiver;
 
  public:
-  Error(const Error& other) { copy_from(other.m_message); }
+  Error(const Error& other) {
+    copy_from(other.m_message);
+  }
   Error(Error&& other) noexcept : m_message(other.m_message) {
     other.m_message = nullptr;
   }
-  ~Error() noexcept override { destroy(); }
+  ~Error() noexcept override {
+    destroy();
+  }
   Error& operator=(const Error& other) {
     destroy();
     copy_from(other.m_message);
@@ -291,7 +299,9 @@ class Error final : public std::exception {
     other.m_message = nullptr;
     return *this;
   }
-  const char* what() const noexcept override { return m_message; }
+  const char* what() const noexcept override {
+    return m_message;
+  }
 };
 
 // Exception customization point. This works just like
@@ -340,7 +350,10 @@ struct TryCatch {
 } // namespace behavior
 
 void cxxasync_assert(
-    bool cond, const char* message, const char* file, int line);
+    bool cond,
+    const char* message,
+    const char* file,
+    int line);
 
 // Execlet API
 extern "C" {
@@ -366,18 +379,24 @@ class Execlet {
  public:
   Execlet() : m_priv(cxxasync_execlet_create()) {}
 
-  ~Execlet() { cxxasync_execlet_release(m_priv); }
+  ~Execlet() {
+    cxxasync_execlet_release(m_priv);
+  }
 
   void submit(void* task, void (*run)(void*)) noexcept {
     cxxasync_execlet_submit(m_priv, run, task);
   }
 
-  RustExeclet* raw() { return m_priv; }
+  RustExeclet* raw() {
+    return m_priv;
+  }
 
   // Manually adds a reference to the execlet.
   //
   // Folly uses this via `FollyExeclet`.
-  void add_ref() noexcept { cxxasync_execlet_add_ref(m_priv); }
+  void add_ref() noexcept {
+    cxxasync_execlet_add_ref(m_priv);
+  }
 
   // Manually removes a reference from the execlet.
   //
@@ -385,7 +404,9 @@ class Execlet {
   // reference count is greater than zero) and false if it is dead.
   //
   // Folly uses this via `FollyExeclet`.
-  bool release() noexcept { return cxxasync_execlet_release(m_priv); }
+  bool release() noexcept {
+    return cxxasync_execlet_release(m_priv);
+  }
 };
 
 enum class FuturePollStatus {
@@ -539,7 +560,9 @@ class RustAwaiter {
 
   bool await_suspend(std_coroutine::coroutine_handle<void> next);
 
-  YieldResult&& await_resume() { return m_receiver->get_result(); }
+  YieldResult&& await_resume() {
+    return m_receiver->get_result();
+  }
 };
 
 template <typename Future>
@@ -561,7 +584,9 @@ class RustStreamAwaiter {
   RustStreamAwaiter(RustSender<Future>& sender, YieldResult&& value)
       : m_sender(sender), m_value(std::move(value)) {}
 
-  bool await_ready() noexcept { return false; }
+  bool await_ready() noexcept {
+    return false;
+  }
   bool await_suspend(std_coroutine::coroutine_handle<void> next);
   void await_resume() {}
 };
@@ -588,8 +613,12 @@ class CoroutineHandleContinuation : public Continuation {
   explicit CoroutineHandleContinuation(
       std_coroutine::coroutine_handle<void>&& next)
       : m_next(next) {}
-  void resume() override { m_next.resume(); }
-  void destroy() override { m_next.destroy(); }
+  void resume() override {
+    m_next.resume();
+  }
+  void destroy() override {
+    m_next.destroy();
+  }
 };
 
 // Wrapper object that encapsulates a suspended coroutine. This is the waker
@@ -607,7 +636,9 @@ class SuspendedCoroutine {
   std::unique_ptr<Continuation> m_next;
   WakeFn m_wake_fn;
 
-  void forget_coroutine_handle() { m_next.reset(); }
+  void forget_coroutine_handle() {
+    m_next.reset();
+  }
 
  public:
   SuspendedCoroutine(std::unique_ptr<Continuation>&& next, WakeFn&& wake_fn)
@@ -634,7 +665,9 @@ class SuspendedCoroutine {
   }
 
   // Does not consume the `this` reference.
-  FutureWakeStatus wake() { return m_wake_fn(this); }
+  FutureWakeStatus wake() {
+    return m_wake_fn(this);
+  }
 
   // Performs the initial poll needed when we go to sleep for the first time.
   // Returns true if we should go to sleep and false otherwise.
@@ -681,11 +714,19 @@ class RustPromiseBase {
   RustPromiseBase()
       : m_execlet(), m_channel(Future::vtable()->channel(m_execlet.raw())) {}
 
-  Future get_return_object() noexcept { return std::move(m_channel.future); }
+  Future get_return_object() noexcept {
+    return std::move(m_channel.future);
+  }
 
-  std_coroutine::suspend_never initial_suspend() const noexcept { return {}; }
-  std_coroutine::suspend_never final_suspend() const noexcept { return {}; }
-  std_coroutine::coroutine_handle<> unhandled_done() noexcept { return {}; }
+  std_coroutine::suspend_never initial_suspend() const noexcept {
+    return {};
+  }
+  std_coroutine::suspend_never final_suspend() const noexcept {
+    return {};
+  }
+  std_coroutine::coroutine_handle<> unhandled_done() noexcept {
+    return {};
+  }
 
   void unhandled_exception() noexcept {
     behavior::TryCatch<Future, behavior::Custom>::trycatch(
@@ -700,7 +741,9 @@ class RustPromiseBase {
         });
   }
 
-  Execlet& execlet() noexcept { return m_execlet; }
+  Execlet& execlet() noexcept {
+    return m_execlet;
+  }
 
   // Customization point for library integration (e.g. Folly).
   template <

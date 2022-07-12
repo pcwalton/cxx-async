@@ -17,8 +17,14 @@ use crate::SafeUnwrap;
 use once_cell::sync::OnceCell;
 use std::collections::VecDeque;
 use std::mem;
-use std::sync::{Arc, Condvar, Mutex, Weak};
-use std::task::{Context, RawWaker, RawWakerVTable, Waker};
+use std::sync::Arc;
+use std::sync::Condvar;
+use std::sync::Mutex;
+use std::sync::Weak;
+use std::task::Context;
+use std::task::RawWaker;
+use std::task::RawWakerVTable;
+use std::task::Waker;
 use std::thread;
 
 // Allows the Rust polling interface to drive C++ tasks to completion.
@@ -63,7 +69,7 @@ impl Execlet {
     // Runs all tasks in the runqueue to completion.
     pub(crate) fn run(&self, cx: &mut Context) {
         // Lock.
-        let mut guard = self.0 .0.lock().safe_unwrap();
+        let mut guard = self.0.0.lock().safe_unwrap();
         safe_debug_assert!(!guard.running);
         guard.running = true;
 
@@ -77,7 +83,7 @@ impl Execlet {
                 task.run();
             }
             // Re-acquire the lock.
-            guard = self.0 .0.lock().safe_unwrap();
+            guard = self.0.0.lock().safe_unwrap();
         }
 
         // Unlock.
@@ -86,7 +92,7 @@ impl Execlet {
 
     // Submits a task to this execlet.
     fn submit(&self, task: ExecletTask) {
-        let mut this = self.0 .0.lock().safe_unwrap();
+        let mut this = self.0.0.lock().safe_unwrap();
         this.runqueue.push_back(task);
         if !this.running {
             if let Some(ref waker) = this.waker {
@@ -295,7 +301,7 @@ pub unsafe extern "C" fn cxxasync_execlet_create() -> *const RustExeclet {
 pub unsafe extern "C" fn cxxasync_execlet_add_ref(this: *mut RustExeclet) {
     let execlet = Execlet::from_raw_ref(this); // +1; ref count is now +1
     mem::forget(execlet.clone()); // +1; ref count is now +2
-                                  // -1; ref count is now +1
+    // -1; ref count is now +1
 }
 
 // C++ calls this to decrement the reference count on an execlet and free it if the count hits zero.

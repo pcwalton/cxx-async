@@ -144,21 +144,34 @@
 #[cfg(built_with_cargo)]
 extern crate link_cplusplus;
 
-use crate::execlet::{Execlet, ExecletReaper, RustExeclet};
-use futures::{Stream, StreamExt};
+use crate::execlet::Execlet;
+use crate::execlet::ExecletReaper;
+use crate::execlet::RustExeclet;
+use futures::Stream;
+use futures::StreamExt;
 use std::convert::From;
 use std::error::Error;
 use std::ffi::CStr;
-use std::fmt::{Debug, Display, Formatter, Result as FmtResult};
+use std::fmt::Debug;
+use std::fmt::Display;
+use std::fmt::Formatter;
+use std::fmt::Result as FmtResult;
 use std::future::Future;
-use std::io::{self, Write};
+use std::io;
+use std::io::Write;
 use std::os::raw::c_char;
-use std::panic::{self, AssertUnwindSafe};
+use std::panic;
+use std::panic::AssertUnwindSafe;
 use std::pin::Pin;
 use std::process;
 use std::ptr;
-use std::sync::{Arc, Mutex};
-use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::task::Context;
+use std::task::Poll;
+use std::task::RawWaker;
+use std::task::RawWakerVTable;
+use std::task::Waker;
 
 const FUTURE_STATUS_PENDING: u32 = 0;
 const FUTURE_STATUS_COMPLETE: u32 = 1;

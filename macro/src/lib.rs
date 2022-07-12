@@ -15,12 +15,22 @@
 
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::parse::{Parse, ParseStream, Result as ParseResult};
+use syn::parse::Parse;
+use syn::parse::ParseStream;
+use syn::parse::Result as ParseResult;
 use syn::spanned::Spanned;
-use syn::{
-    Error as SynError, Ident, ImplItem, ItemImpl, Lit, LitStr, Path, Result as SynResult, Token,
-    Type, TypePath, Visibility,
-};
+use syn::Error as SynError;
+use syn::Ident;
+use syn::ImplItem;
+use syn::ItemImpl;
+use syn::Lit;
+use syn::LitStr;
+use syn::Path;
+use syn::Result as SynResult;
+use syn::Token;
+use syn::Type;
+use syn::TypePath;
+use syn::Visibility;
 
 /// Defines a future or stream type that can be awaited from both Rust and C++.
 ///
@@ -70,12 +80,18 @@ use syn::{
 pub fn bridge(attribute: TokenStream, item: TokenStream) -> TokenStream {
     match AstPieces::from_token_streams(attribute, item) {
         Err(error) => error.into_compile_error().into(),
-        Ok(pieces @ AstPieces { bridge_trait: BridgeTrait::Future, .. }) => {
-            bridge_future(pieces)
-        }
-        Ok(pieces @ AstPieces { bridge_trait: BridgeTrait::Stream, .. }) => {
-            bridge_stream(pieces)
-        }
+        Ok(
+            pieces @ AstPieces {
+                bridge_trait: BridgeTrait::Future,
+                ..
+            },
+        ) => bridge_future(pieces),
+        Ok(
+            pieces @ AstPieces {
+                bridge_trait: BridgeTrait::Stream,
+                ..
+            },
+        ) => bridge_stream(pieces),
     }
 }
 
@@ -417,7 +433,7 @@ impl AstPieces {
                 return Err(SynError::new(
                     impl_item.span(),
                     "must implement the `Future` or `Stream` trait",
-                ))
+                ));
             }
         };
 
@@ -501,7 +517,7 @@ impl AstPieces {
                 return Err(SynError::new(
                     impl_item.self_ty.span(),
                     "expected `impl` declaration to implement a single type",
-                ))
+                ));
             }
         };
 

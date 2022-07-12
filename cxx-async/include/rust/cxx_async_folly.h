@@ -12,15 +12,15 @@
 #ifndef RUST_CXX_ASYNC_FOLLY_H
 #define RUST_CXX_ASYNC_FOLLY_H
 
-#include <atomic>
-#include <mutex>
-#include <queue>
-#include <type_traits>
 #include <folly/Executor.h>
 #include <folly/Try.h>
 #include <folly/executors/ManualExecutor.h>
 #include <folly/experimental/coro/Task.h>
 #include <folly/experimental/coro/ViaIfAsync.h>
+#include <atomic>
+#include <mutex>
+#include <queue>
+#include <type_traits>
 #include "rust/cxx_async.h"
 
 namespace rust {
@@ -44,7 +44,9 @@ class FollyExeclet : public folly::Executor {
  public:
   FollyExeclet(Execlet& rust_execlet) : m_rust_execlet(rust_execlet) {}
 
-  Execlet& rust_execlet() { return m_rust_execlet; }
+  Execlet& rust_execlet() {
+    return m_rust_execlet;
+  }
 
   // Submits a task to the execlet.
   virtual void add(folly::Func task) {
