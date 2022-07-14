@@ -220,8 +220,9 @@ class RustFuture {
   }
 
   ~RustFuture() noexcept {
-    if (m_vtable != nullptr)
+    if (m_vtable != nullptr) {
       Derived::vtable()->future_drop(std::move(*static_cast<Derived*>(this)));
+    }
   }
 
   inline RustAwaiter<Derived> operator co_await() && noexcept {
@@ -241,19 +242,34 @@ class RustSender {
   void* m_ptr;
 
   RustSender() = delete;
-  RustSender(RustSender&) = delete;
+  RustSender(const RustSender&) = delete;
 
  public:
   ~RustSender() {
-    if (m_ptr == nullptr)
+    if (m_ptr == nullptr) {
       return;
+    }
     // Passing the wrapped pointer as though it were the sender works because
     // `CxxAsyncSender` is marked as `#[repr(transparent)]`.
     Future::vtable()->sender_drop(m_ptr);
     m_ptr = nullptr;
   }
-  RustSender(RustSender&& other) : m_ptr(other.m_ptr) {
+  RustSender(RustSender&& other) noexcept : m_ptr(other.m_ptr) {
     other.m_ptr = nullptr;
+  }
+
+  RustSender& operator=(RustSender&& other) {
+    if (m_ptr == nullptr) {
+      m_ptr = other.m_ptr;
+      other.m_ptr = nullptr;
+      return *this;
+    }
+    // Passing the wrapped pointer as though it were the sender works because
+    // `CxxAsyncSender` is marked as `#[repr(transparent)]`.
+    Future::vtable()->sender_drop(m_ptr);
+    m_ptr = other.m_ptr;
+    other.m_ptr = nullptr;
+    return *this;
   }
 };
 
