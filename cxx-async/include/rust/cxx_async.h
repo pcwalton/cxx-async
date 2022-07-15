@@ -206,7 +206,7 @@ class RustFuture {
   void* m_vtable;
 
   RustFuture() = delete;
-  RustFuture(RustFuture&) = delete;
+  RustFuture(const RustFuture&) = delete;
   void operator=(const RustFuture&) = delete;
 
  public:
@@ -223,6 +223,15 @@ class RustFuture {
     if (m_vtable != nullptr) {
       Derived::vtable()->future_drop(std::move(*static_cast<Derived*>(this)));
     }
+  }
+
+  RustFuture& operator=(RustFuture&& other) noexcept {
+    if (m_vtable != nullptr) {
+      Derived::vtable()->future_drop(std::move(*static_cast<Derived*>(this)));
+    }
+    m_data = other.m_data;
+    m_vtable = other.m_vtable;
+    other.m_data = other.m_vtable = nullptr;
   }
 
   inline RustAwaiter<Derived> operator co_await() && noexcept {
@@ -243,6 +252,7 @@ class RustSender {
 
   RustSender() = delete;
   RustSender(const RustSender&) = delete;
+  RustSender& operator=(const RustSender&) = delete;
 
  public:
   ~RustSender() {
