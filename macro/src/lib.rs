@@ -240,7 +240,7 @@ fn bridge_future(pieces: AstPieces) -> TokenStream {
 ///
 /// ## Safety
 ///
-/// It's the programmer's responsibility to ensure that the specified `Output` type correctly
+/// It's the programmer's responsibility to ensure that the specified `Item` type correctly
 /// reflects the type of the values that any returned C++ streams resolves to. `cxx_async` can't
 /// currently check to ensure that these types match. If the types don't match, undefined behavior
 /// can result. See the [cxx documentation] for information on the mapping between Rust types and
