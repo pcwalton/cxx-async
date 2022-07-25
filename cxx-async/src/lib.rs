@@ -7,7 +7,7 @@
  * of this source tree.
  */
 
-// cxx-async/src/main.rs
+// cxx-async/src/lib.rs
 //
 //! `cxx-async` is a Rust crate that extends the [`cxx`](http://cxx.rs/) library to provide
 //! seamless interoperability between asynchronous Rust code using `async`/`await` and [C++20
