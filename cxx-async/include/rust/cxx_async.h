@@ -232,6 +232,7 @@ class RustFuture {
     m_data = other.m_data;
     m_vtable = other.m_vtable;
     other.m_data = other.m_vtable = nullptr;
+    return *this;
   }
 
   inline RustAwaiter<Derived> operator co_await() && noexcept {
