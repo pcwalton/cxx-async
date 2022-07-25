@@ -195,7 +195,7 @@ macro_rules! safe_panic {
         {
             use ::std::io::Write;
             drop(write!(::std::io::stderr(), $($args),*));
-            drop(write!(::std::io::stderr(), " at {}:{}", file!(), line!()));
+            drop(writeln!(::std::io::stderr(), " at {}:{}", file!(), line!()));
             ::std::process::abort();
         }
     }
@@ -206,7 +206,7 @@ macro_rules! safe_debug_assert {
     ($cond:expr) => {{
         use ::std::io::Write;
         if !$cond {
-            drop(write!(
+            drop(writeln!(
                 ::std::io::stderr(),
                 "assertion failed: {}",
                 stringify!($cond)
@@ -849,7 +849,7 @@ where
     match result {
         Ok(result) => result,
         Err(error) => {
-            drop(write!(
+            drop(writeln!(
                 io::stderr(),
                 "Rust async code panicked when awaited from C++: {:?}",
                 error
