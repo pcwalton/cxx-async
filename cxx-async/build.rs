@@ -14,6 +14,8 @@ fn main() {
     let no_bridges: Vec<PathBuf> = vec![];
     cxx_build::bridges(no_bridges)
         .files(&vec!["src/cxx_async.cpp"])
+        .flag_if_supported("-std=c++20")
+        .flag_if_supported("-fcoroutines-ts")
         .include("include")
         .compile("cxx-async");
 }
