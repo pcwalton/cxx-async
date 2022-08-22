@@ -134,7 +134,7 @@
             __VA_ARGS__)> {                                                    \
     typedef type YieldResult;                                                  \
     typedef final_result_type FinalResult;                                     \
-    static const auto vtable() {                                               \
+    static auto vtable() {                                                     \
       return CXXASYNC_CONCAT_3(                                                \
           cxxasync_, CXXASYNC_JOIN_DOLLAR(__VA_ARGS__), _vtable());            \
     }                                                                          \
