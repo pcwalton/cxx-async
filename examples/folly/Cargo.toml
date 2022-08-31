@@ -21,5 +21,4 @@ features = ["thread-pool"]
 
 [build-dependencies]
 cxx-build = "1"
-pkg-config = "0.3"
-shlex = "1"
+find-folly = "0.1"
