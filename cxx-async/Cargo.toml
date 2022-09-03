@@ -16,7 +16,7 @@ path = "src/lib.rs"
 crate-type = ["lib"]
 
 [dependencies]
-async-recursion = "0.3"
+async-recursion = "1"
 once_cell = "1"
 pin-utils = "0.1"
 
