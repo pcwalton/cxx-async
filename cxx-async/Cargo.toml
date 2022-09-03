@@ -2,7 +2,7 @@
 name = "cxx-async"
 version = "0.1.0"
 authors = ["Patrick Walton <pcwalton@mimiga.net>"]
-edition = "2018"
+edition = "2021"
 links = "cxx-async"
 description = "Simple interoperability between C++ coroutines and asynchronous Rust"
 license = "MIT OR Apache-2.0"
