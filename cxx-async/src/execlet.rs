@@ -295,16 +295,6 @@ pub unsafe extern "C" fn cxxasync_execlet_create() -> *const RustExeclet {
     Arc::into_raw(Execlet::new().0)
 }
 
-// C++ calls this to increment the reference count on an execlet.
-#[no_mangle]
-#[doc(hidden)]
-#[allow(clippy::redundant_clone)]
-pub unsafe extern "C" fn cxxasync_execlet_add_ref(this: *mut RustExeclet) {
-    let execlet = Execlet::from_raw_ref(this); // +1; ref count is now +1
-    mem::forget(execlet.clone()); // +1; ref count is now +2
-    // -1; ref count is now +1
-}
-
 // C++ calls this to decrement the reference count on an execlet and free it if the count hits zero.
 #[no_mangle]
 #[doc(hidden)]

@@ -386,8 +386,6 @@ void cxxasync_assert(
 extern "C" {
 // Creates a new execlet.
 RustExeclet* cxxasync_execlet_create();
-// Increments the reference count on an execlet.
-void cxxasync_execlet_add_ref(RustExeclet* self);
 // Decrements the reference count on an execlet and frees it if the count hits
 // zero. Returns true if the execlet is still alive after this call and false
 // otherwise.
@@ -400,11 +398,16 @@ void cxxasync_execlet_submit(RustExeclet* self, void (*run)(void*), void* task);
 class Execlet {
   RustExeclet* m_priv;
 
+  // NB: This starts out at *zero*, not at one. Folly is weird in that it expects the object to be
+  // destroyed once `keepAliveRelease()` is called a number of times greater than zero and equal to
+  // the number of times `keepAliveAcquire()` was called.
+  std::atomic<uintptr_t> m_refcount;
+
   Execlet(const Execlet&) = delete;
   Execlet& operator=(const Execlet&) = delete;
 
  public:
-  Execlet() : m_priv(cxxasync_execlet_create()) {}
+  Execlet() : m_priv(cxxasync_execlet_create()), m_refcount(0) {}
 
   ~Execlet() {
     cxxasync_execlet_release(m_priv);
@@ -418,21 +421,23 @@ class Execlet {
     return m_priv;
   }
 
-  // Manually adds a reference to the execlet.
+  // Manually adds a reference to this execlet wrapper.
   //
   // Folly uses this via `FollyExeclet`.
   void add_ref() noexcept {
-    cxxasync_execlet_add_ref(m_priv);
+    m_refcount.fetch_add(1);
   }
 
-  // Manually removes a reference from the execlet.
+  // Manually removes a reference from this execlet wrapper.
   //
   // Returns true if the execlet is still alive after the release (i.e. the
   // reference count is greater than zero) and false if it is dead.
   //
   // Folly uses this via `FollyExeclet`.
   bool release() noexcept {
-    return cxxasync_execlet_release(m_priv);
+    uintptr_t last_refcount = m_refcount.fetch_sub(1);
+    CXXASYNC_ASSERT(last_refcount > 0);
+    return last_refcount > 1;
   }
 };
 
