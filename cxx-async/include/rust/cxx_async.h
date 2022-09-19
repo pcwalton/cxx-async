@@ -557,8 +557,11 @@ class RustFutureReceiver {
     switch (m_status) {
       case FuturePollStatus::Complete:
         return std::move(m_result.m_result);
-      case FuturePollStatus::Error:
-        throw Error(m_result.m_exception.c_str());
+      case FuturePollStatus::Error: {
+        Error error(m_result.m_exception.c_str());
+        m_result.m_exception.~String();
+        throw std::move(error);
+      }
       case FuturePollStatus::Pending:
       case FuturePollStatus::Running:
         // TODO(pcwalton): Handle C++ consuming Rust streams.
