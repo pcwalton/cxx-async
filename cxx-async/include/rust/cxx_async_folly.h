@@ -38,6 +38,11 @@ extern "C" inline void execlet_run_task(void* task_ptr) {
 class FollyExeclet : public folly::Executor {
   Execlet& m_rust_execlet;
 
+  // NB: This starts out at *zero*, not at one. Folly is weird in that it expects the object to be
+  // destroyed once `keepAliveRelease()` is called a number of times greater than zero and equal to
+  // the number of times `keepAliveAcquire()` was called.
+  std::atomic<uintptr_t> m_refcount;
+
   FollyExeclet(const FollyExeclet&) = delete;
   FollyExeclet& operator=(const FollyExeclet&) = delete;
 
@@ -54,15 +59,18 @@ class FollyExeclet : public folly::Executor {
   }
 
   virtual bool keepAliveAcquire() noexcept {
-    m_rust_execlet.add_ref();
+    m_refcount.fetch_add(1);
     return true;
   }
 
   virtual void keepAliveRelease() noexcept {
     // Decrement the reference count and destroys this wrapper if the execlet is
     // now dead.
-    if (!m_rust_execlet.release())
+    uintptr_t last_refcount = m_refcount.fetch_sub(1);
+    CXXASYNC_ASSERT(last_refcount > 0);
+    if (last_refcount == 1) {
       delete this;
+    }
   }
 };
 
