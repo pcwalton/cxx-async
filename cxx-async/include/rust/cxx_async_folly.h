@@ -38,9 +38,10 @@ extern "C" inline void execlet_run_task(void* task_ptr) {
 class FollyExeclet : public folly::Executor {
   Execlet& m_rust_execlet;
 
-  // NB: This starts out at *zero*, not at one. Folly is weird in that it expects the object to be
-  // destroyed once `keepAliveRelease()` is called a number of times greater than zero and equal to
-  // the number of times `keepAliveAcquire()` was called.
+  // NB: This starts out at *zero*, not at one. Folly is weird in that it
+  // expects the object to be destroyed once `keepAliveRelease()` is called a
+  // number of times greater than zero and equal to the number of times
+  // `keepAliveAcquire()` was called.
   std::atomic<uintptr_t> m_refcount;
 
   FollyExeclet(const FollyExeclet&) = delete;
