@@ -527,7 +527,7 @@ class RustFutureReceiver {
   // first).
   FutureWakeStatus wake(SuspendedCoroutine* coroutine);
 
-  YieldResult&& get_result() {
+  YieldResult get_result() {
     // Safe to use without taking the lock because the caller asserts that the
     // future has already completed.
     switch (m_status) {
@@ -571,7 +571,7 @@ class RustAwaiter {
 
   bool await_suspend(std_coroutine::coroutine_handle<void> next);
 
-  YieldResult&& await_resume() {
+  YieldResult await_resume() {
     return m_receiver->get_result();
   }
 };
