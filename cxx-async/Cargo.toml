@@ -1,6 +1,6 @@
 [package]
 name = "cxx-async"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Patrick Walton <pcwalton@mimiga.net>"]
 edition = "2021"
 links = "cxx-async"
@@ -26,7 +26,7 @@ features = ["c++20"]
 
 [dependencies.cxx-async-macro]
 path = "../macro"
-version = "0.1.0"
+version = "0.1.1"
 
 [dependencies.futures]
 version = "0.3"

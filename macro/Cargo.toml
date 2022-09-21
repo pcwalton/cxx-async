@@ -1,6 +1,6 @@
 [package]
 name = "cxx-async-macro"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "The macro for simple interoperability between C++ coroutines and asynchronous Rust"
 license = "MIT OR Apache-2.0"
