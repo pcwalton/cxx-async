@@ -61,6 +61,7 @@ struct TryCatch<T, Custom> {
 
 RustFutureF64 folly_dot_product_coro();
 RustFutureF64 folly_dot_product_futures();
+void folly_call_rust_hello();
 foo::bar::RustFutureStringNamespaced folly_get_namespaced_string();
 double folly_call_rust_dot_product();
 double folly_schedule_rust_dot_product();

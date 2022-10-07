@@ -148,6 +148,11 @@ foo::bar::RustFutureStringNamespaced folly_get_namespaced_string() {
   co_return rust::String("hello world");
 }
 
+void folly_call_rust_hello() {
+  RustFutureVoid future = rust_hello();
+  return folly::coro::blockingWait(std::move(future));
+}
+
 double folly_call_rust_dot_product() {
   RustFutureF64 future = rust_dot_product();
   return folly::coro::blockingWait(std::move(future));

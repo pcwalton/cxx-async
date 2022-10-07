@@ -21,6 +21,7 @@ mod ffi {
     }
 
     extern "Rust" {
+        fn rust_hello() -> RustFutureVoid;
         fn rust_dot_product() -> RustFutureF64;
         fn rust_not_product() -> RustFutureF64;
         fn rust_cppcoro_ping_pong(i: i32) -> RustFutureString;
@@ -37,6 +38,7 @@ mod ffi {
         type RustStreamString = crate::RustStreamString;
 
         fn cppcoro_dot_product() -> RustFutureF64;
+        fn cppcoro_call_rust_hello();
         fn cppcoro_call_rust_dot_product() -> f64;
         fn cppcoro_schedule_rust_dot_product() -> f64;
         fn cppcoro_get_namespaced_string() -> RustFutureStringNamespaced;
@@ -111,6 +113,10 @@ impl Xorshift {
     }
 }
 
+fn rust_hello() -> RustFutureVoid {
+    RustFutureVoid::infallible(async { println!("hello world") })
+}
+
 #[async_recursion]
 async fn dot_product(range: Range<usize>) -> f64 {
     let len = range.end - range.start;
@@ -175,7 +181,13 @@ fn test_rust_calling_cpp_on_scheduler() {
     assert_eq!(value, 75719554055754070000000.0);
 }
 
-// Tests C++ calling async Rust code synchronously.
+// Tests C++ calling async Rust code that returns void synchronously.
+#[test]
+fn test_cpp_calling_void_rust_synchronously() {
+    ffi::cppcoro_call_rust_hello();
+}
+
+// Tests C++ calling async Rust code that returns non-void synchronously.
 #[test]
 fn test_cpp_calling_rust_synchronously() {
     assert_eq!(
@@ -291,6 +303,7 @@ fn main() {
     println!("{:?}", executor::block_on(future).unwrap());
 
     // Test C++ calling Rust async functions.
+    ffi::cppcoro_call_rust_hello();
     println!("{}", ffi::cppcoro_call_rust_dot_product());
     println!("{}", ffi::cppcoro_schedule_rust_dot_product());
 

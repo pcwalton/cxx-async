@@ -1,6 +1,6 @@
 // cxx-async/examples/folly/src/main.rs
 //
-//! Demonstrates how to use Folly with `cppcoro`.
+//! Demonstrates how to use Folly with `cxx_async`.
 
 use crate::ffi::StringNamespaced;
 use async_recursion::async_recursion;
@@ -21,6 +21,7 @@ mod ffi {
     }
 
     extern "Rust" {
+        fn rust_hello() -> RustFutureVoid;
         fn rust_dot_product() -> RustFutureF64;
         fn rust_not_product() -> RustFutureF64;
         fn rust_folly_ping_pong(i: i32) -> RustFutureString;
@@ -39,6 +40,7 @@ mod ffi {
         fn folly_dot_product_coro() -> RustFutureF64;
         fn folly_dot_product_futures() -> RustFutureF64;
         fn folly_get_namespaced_string() -> RustFutureStringNamespaced;
+        fn folly_call_rust_hello();
         fn folly_call_rust_dot_product() -> f64;
         fn folly_schedule_rust_dot_product() -> f64;
         fn folly_not_product() -> RustFutureF64;
@@ -108,6 +110,10 @@ impl Xorshift {
         self.state = x;
         x
     }
+}
+
+fn rust_hello() -> RustFutureVoid {
+    RustFutureVoid::infallible(async { println!("hello world") })
 }
 
 #[async_recursion]
@@ -184,7 +190,13 @@ fn test_rust_calling_cpp_on_scheduler() {
     assert_eq!(value, 75719554055754070000000.0);
 }
 
-// Tests C++ calling async Rust code synchronously.
+// Tests C++ calling async Rust code that returns void synchronously.
+#[test]
+fn test_cpp_calling_void_rust_synchronously() {
+    ffi::folly_call_rust_hello();
+}
+
+// Tests C++ calling async Rust code that returns non-void synchronously.
 #[test]
 fn test_cpp_calling_rust_synchronously() {
     assert_eq!(
@@ -302,6 +314,7 @@ fn main() {
     println!("{:?}", executor::block_on(future).unwrap());
 
     // Test C++ calling Rust async functions.
+    ffi::folly_call_rust_hello();
     ffi::folly_call_rust_dot_product();
     ffi::folly_schedule_rust_dot_product();
 

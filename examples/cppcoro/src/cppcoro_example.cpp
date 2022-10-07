@@ -85,6 +85,10 @@ foo::bar::RustFutureStringNamespaced cppcoro_get_namespaced_string() {
   co_return rust::String("hello world");
 }
 
+void cppcoro_call_rust_hello() {
+  return cppcoro::sync_wait(rust_hello());
+}
+
 double cppcoro_call_rust_dot_product() {
   return cppcoro::sync_wait(rust_dot_product());
 }

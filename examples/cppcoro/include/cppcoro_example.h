@@ -55,6 +55,7 @@ struct TryCatch<T, Custom> {
 } // namespace rust
 
 RustFutureF64 cppcoro_dot_product();
+void cppcoro_call_rust_hello();
 double cppcoro_call_rust_dot_product();
 double cppcoro_schedule_rust_dot_product();
 foo::bar::RustFutureStringNamespaced cppcoro_get_namespaced_string();

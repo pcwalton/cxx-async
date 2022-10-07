@@ -492,6 +492,8 @@ union RustFutureResult {
   RustFutureResult() {}
   // When using this type, you must manually drop the contents.
   ~RustFutureResult() {}
+
+  Result getResult() { return std::move(m_result); }
 };
 
 template <>
@@ -503,6 +505,8 @@ union RustFutureResult<void> {
   RustFutureResult() {}
   // When using this type, you must manually drop the contents.
   ~RustFutureResult() {}
+
+  void getResult() {}
 };
 
 template <typename Future>
@@ -532,7 +536,7 @@ class RustFutureReceiver {
     // future has already completed.
     switch (m_status) {
       case FuturePollStatus::Complete:
-        return std::move(m_result.m_result);
+        return m_result.getResult();
       case FuturePollStatus::Error: {
         Error error(m_result.m_exception.c_str());
         m_result.m_exception.~String();
