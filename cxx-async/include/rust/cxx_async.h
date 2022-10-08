@@ -493,7 +493,9 @@ union RustFutureResult {
   // When using this type, you must manually drop the contents.
   ~RustFutureResult() {}
 
-  Result getResult() { return std::move(m_result); }
+  Result getResult() {
+    return std::move(m_result);
+  }
 };
 
 template <>
