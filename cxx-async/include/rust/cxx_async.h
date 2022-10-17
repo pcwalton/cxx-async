@@ -12,10 +12,12 @@
 #ifndef RUST_CXX_ASYNC_H
 #define RUST_CXX_ASYNC_H
 
-#ifdef CXXASYNC_HAVE_COROUTINE_HEADER
+#if __has_include(<coroutine>)
 #include <coroutine>
-#else
+#elif __has_include(<experimental/coroutine>)
 #include <experimental/coroutine>
+#else
+#error Neither <coroutine> nor <experimental/coroutine> was found.
 #endif
 
 #include <atomic>
@@ -165,9 +167,9 @@
 namespace rust {
 namespace async {
 
-#ifdef CXXASYNC_HAVE_COROUTINE_HEADER
+#if __has_include(<coroutine>)
 namespace std_coroutine = std;
-#else
+#elif __has_include(<experimental/coroutine>)
 namespace std_coroutine = std::experimental;
 #endif
 
