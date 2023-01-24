@@ -21,7 +21,7 @@
 CXXASYNC_DEFINE_FUTURE(void, RustFutureVoid);
 CXXASYNC_DEFINE_FUTURE(double, RustFutureF64);
 CXXASYNC_DEFINE_FUTURE(rust::String, RustFutureString);
-CXXASYNC_DEFINE_FUTURE(rust::String, foo, bar, RustFutureStringNamespaced);
+CXXASYNC_DEFINE_FUTURE(::rust::String, foo, rust, bar, RustFutureStringNamespaced);
 CXXASYNC_DEFINE_STREAM(rust::String, RustStreamString);
 
 class MyException : public std::exception {
@@ -62,7 +62,7 @@ struct TryCatch<T, Custom> {
 RustFutureF64 folly_dot_product_coro();
 RustFutureF64 folly_dot_product_futures();
 void folly_call_rust_hello();
-foo::bar::RustFutureStringNamespaced folly_get_namespaced_string();
+foo::rust::bar::RustFutureStringNamespaced folly_get_namespaced_string();
 double folly_call_rust_dot_product();
 double folly_schedule_rust_dot_product();
 RustFutureF64 folly_not_product();

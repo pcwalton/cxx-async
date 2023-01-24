@@ -33,7 +33,7 @@ mod ffi {
         type RustFutureVoid = crate::RustFutureVoid;
         type RustFutureF64 = crate::RustFutureF64;
         type RustFutureString = crate::RustFutureString;
-        #[namespace = foo::bar]
+        #[namespace = foo::rust::bar]
         type RustFutureStringNamespaced = crate::RustFutureStringNamespaced;
         type RustStreamString = crate::RustStreamString;
 
@@ -69,7 +69,7 @@ unsafe impl Future for RustFutureF64 {
 unsafe impl Future for RustFutureString {
     type Output = String;
 }
-#[cxx_async::bridge(namespace = foo::bar)]
+#[cxx_async::bridge(namespace = foo::rust::bar)]
 unsafe impl Future for RustFutureStringNamespaced {
     type Output = StringNamespaced;
 }

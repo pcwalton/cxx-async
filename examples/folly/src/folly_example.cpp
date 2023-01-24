@@ -143,7 +143,7 @@ RustFutureF64 folly_dot_product_futures() {
   co_return co_await dot_product_futures();
 }
 
-foo::bar::RustFutureStringNamespaced folly_get_namespaced_string() {
+foo::rust::bar::RustFutureStringNamespaced folly_get_namespaced_string() {
   co_await dot_product_coro();
   co_return rust::String("hello world");
 }
