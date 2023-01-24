@@ -133,10 +133,23 @@ support for C++20. Some C++ compilers (e.g. Apple clang 13.0.0) that implement t
 crash when compiling Folly. It's also recommended to use `libc++` instead of `libstdc++`, as the
 former has more complete support for coroutines.
 
-Usage of `cxx-async` with Folly requires that Folly have been built with coroutine support. This
-generally means that you need to build Folly with `-DCXX_STD=20`. Many distributions of Folly (e.g.
-the one in Homebrew) don't have coroutine support enabled; a common symptom of this is a linker
-error mentioning a missing symbol `folly::resumeCoroutineWithNewAsyncStackRoot`.
+### Folly installation
+
+Usage of `cxx-async` with Folly requires that Folly have been built with coroutine support. Many
+distributions of Folly (e.g.  the one in Homebrew) don't have coroutine support enabled; a common
+symptom of this is a linker error mentioning a missing symbol
+`folly::resumeCoroutineWithNewAsyncStackRoot`.
+
+To build Folly with coroutine support on macOS, try:
+
+```sh
+$ git clone https://github.com/facebook/folly.git
+$ cd folly
+$ ./build.sh --install-dir=/usr/local --extra-cmake-defines \
+    '{"CXX_STD": "c++20", "CMAKE_CXX_FLAGS": "-fcoroutines-ts"}'
+```
+
+Note that, depending on how your permissions are set up, you might get an error like `Permission denied: '/usr/local/.built-by-getdeps'`; this is harmless.
 
 ## Code of conduct
 
