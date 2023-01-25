@@ -125,39 +125,38 @@
   CXXASYNC_DISPATCH_VARIADIC(CXXASYNC_CLOSE_NAMESPACE_, __VA_ARGS__) \
   (__VA_ARGS__)
 
-#define CXXASYNC_DEFINE_FUTURE_OR_STREAM(type, final_result_type, ...)         \
-  CXXASYNC_OPEN_NAMESPACE(__VA_ARGS__)                                         \
-  struct CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__);                                \
-  extern "C" const ::rust::async::Vtable<CXXASYNC_STRIP_NAMESPACE(             \
-      __VA_ARGS__)>*                                                           \
-      CXXASYNC_CONCAT_3(                                                       \
-          cxxasync_, CXXASYNC_JOIN_DOLLAR(__VA_ARGS__), _vtable)();            \
-  struct CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__)                                 \
-      : public ::rust::async::RustFuture<CXXASYNC_STRIP_NAMESPACE(             \
-            __VA_ARGS__)> {                                                    \
-    typedef type YieldResult;                                                  \
-    typedef final_result_type FinalResult;                                     \
-    static auto vtable() {                                                     \
-      return CXXASYNC_CONCAT_3(                                                \
-          cxxasync_, CXXASYNC_JOIN_DOLLAR(__VA_ARGS__), _vtable());            \
-    }                                                                          \
-    CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__)() = delete;                          \
-    CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__)                                      \
-    (CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__) &) = delete;                        \
-    void operator=(const CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__) &) = delete;    \
-                                                                               \
-   public:                                                                     \
-    CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__)                                      \
-    (CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__) && other) noexcept                  \
-        : ::rust::async::RustFuture<CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__)>(    \
-              std::move(other)) {}                                             \
-  };                                                                           \
-  CXXASYNC_CLOSE_NAMESPACE(__VA_ARGS__)                                        \
-  template <typename... Args>                                                  \
-  struct ::rust::async::std_coroutine::                                        \
-      coroutine_traits<CXXASYNC_JOIN_NAMESPACE(__VA_ARGS__), Args...> {        \
-    using promise_type =                                                       \
-        ::rust::async::RustPromise<CXXASYNC_JOIN_NAMESPACE(__VA_ARGS__)>;      \
+#define CXXASYNC_DEFINE_FUTURE_OR_STREAM(type, final_result_type, ...)      \
+  CXXASYNC_OPEN_NAMESPACE(__VA_ARGS__)                                      \
+  struct CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__);                             \
+  extern "C" const ::rust::async::                                          \
+      Vtable<CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__)>* CXXASYNC_CONCAT_3(     \
+          cxxasync_, CXXASYNC_JOIN_DOLLAR(__VA_ARGS__), _vtable)();         \
+  struct CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__)                              \
+      : public ::rust::async::RustFuture<CXXASYNC_STRIP_NAMESPACE(          \
+            __VA_ARGS__)> {                                                 \
+    typedef type YieldResult;                                               \
+    typedef final_result_type FinalResult;                                  \
+    static const auto vtable() {                                            \
+      return CXXASYNC_CONCAT_3(                                             \
+          cxxasync_, CXXASYNC_JOIN_DOLLAR(__VA_ARGS__), _vtable());         \
+    }                                                                       \
+    CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__)() = delete;                       \
+    CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__)                                   \
+    (CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__) &) = delete;                     \
+    void operator=(const CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__) &) = delete; \
+                                                                            \
+   public:                                                                  \
+    CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__)                                   \
+    (CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__) && other) noexcept               \
+        : ::rust::async::RustFuture<CXXASYNC_STRIP_NAMESPACE(__VA_ARGS__)>( \
+              std::move(other)) {}                                          \
+  };                                                                        \
+  CXXASYNC_CLOSE_NAMESPACE(__VA_ARGS__)                                     \
+  template <typename... Args>                                               \
+  struct ::rust::async::std_coroutine::                                     \
+      coroutine_traits<CXXASYNC_JOIN_NAMESPACE(__VA_ARGS__), Args...> {     \
+    using promise_type =                                                    \
+        ::rust::async::RustPromise<CXXASYNC_JOIN_NAMESPACE(__VA_ARGS__)>;   \
   };
 
 #define CXXASYNC_DEFINE_FUTURE(type, ...) \
