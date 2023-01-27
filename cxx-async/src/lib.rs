@@ -94,7 +94,12 @@
 //! // `CXXASYNC_DEFINE_FUTURE(rust::String, mycompany, myproject, RustFutureString);`. The first
 //! // argument is the C++ type that `cxx` maps your Rust type to: in this case, `String` maps to
 //! // `rust::String`, so we supply `rust::String` here.
-//!
+//! //
+//! // Note that, because the C preprocessor doesn't know about the `<` and `>` brackets that
+//! // surround template arguments, a template type that contains multiple arguments (e.g.
+//! // `std::pair<int, std::string>`) will need to be factored out into a `typedef` to be used
+//! // inside `CXXASYNC_DEFINE_FUTURE`. Otherwise, the C preprocessor won't parse it properly.
+//! //
 //! // This macro must be invoked at the top level, not in a namespace.
 //! CXXASYNC_DEFINE_FUTURE(rust::String, RustFutureString);
 //! ```
