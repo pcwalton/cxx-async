@@ -69,8 +69,8 @@ Now, in your C++ file, make sure to `#include` the right headers:
 
 ```cpp
 #include "rust/cxx.h"
-#include "rust/cxx_async.h"
-#include "rust/cxx_async_cppcoro.h"  // Or cxx_async_folly.h, as appropriate.
+#include "cxx-async/include/rust/cxx_async.h"
+#include "cxx-async/include/rust/cxx_async_cppcoro.h"  // Or cxx_async_folly.h, as appropriate.
 ```
 
 And add a call to the `CXXASYNC_DEFINE_FUTURE` macro to define the C++ side of the future:

@@ -36,7 +36,8 @@ fn main() {
     cxx_build::bridges(no_bridges)
         .files(&vec!["src/cxx_async.cpp"])
         .flag_if_supported("-std=c++20")
-        .flag_if_supported("-fcoroutines-ts")
+        .flag_if_supported("-fcoroutines-ts") // for clang
+        .flag_if_supported("-fcoroutines") // for gcc
         .include("include")
         .compile("cxx-async");
 }
