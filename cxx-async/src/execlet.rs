@@ -69,7 +69,7 @@ impl Execlet {
     // Runs all tasks in the runqueue to completion.
     pub(crate) fn run(&self, cx: &mut Context) {
         // Lock.
-        let mut guard = self.0.0.lock().safe_unwrap();
+        let mut guard = self.0 .0.lock().safe_unwrap();
         safe_debug_assert!(!guard.running);
         guard.running = true;
 
@@ -83,7 +83,7 @@ impl Execlet {
                 task.run();
             }
             // Re-acquire the lock.
-            guard = self.0.0.lock().safe_unwrap();
+            guard = self.0 .0.lock().safe_unwrap();
         }
 
         // Unlock.
@@ -92,7 +92,7 @@ impl Execlet {
 
     // Submits a task to this execlet.
     fn submit(&self, task: ExecletTask) {
-        let mut this = self.0.0.lock().safe_unwrap();
+        let mut this = self.0 .0.lock().safe_unwrap();
         this.runqueue.push_back(task);
         if !this.running {
             if let Some(ref waker) = this.waker {

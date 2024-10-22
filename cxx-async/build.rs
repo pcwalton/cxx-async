@@ -22,7 +22,10 @@ fn main() {
             Path::join(&dest_include_path, header),
         ));
     }
-    println!("cargo:include={}", Path::join(&out_dir, "include").to_string_lossy());
+    println!(
+        "cargo:include={}",
+        Path::join(&out_dir, "include").to_string_lossy()
+    );
 
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=src/cxx_async.cpp");
@@ -34,6 +37,8 @@ fn main() {
 
     let no_bridges: Vec<PathBuf> = vec![];
     cxx_build::bridges(no_bridges)
+        .warnings(false)
+        .cargo_warnings(false)
         .files(&vec!["src/cxx_async.cpp"])
         .flag_if_supported("-std=c++20")
         .flag_if_supported("-fcoroutines-ts") // for clang

@@ -1,7 +1,5 @@
 // cxx-async/examples/folly/build.rs
 
-use find_folly;
-
 fn main() {
     let folly = find_folly::probe_folly().expect("Couldn't find the Folly library!");
 
