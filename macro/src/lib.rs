@@ -527,8 +527,7 @@ impl AstPieces {
                 namespace
                     .0
                     .iter()
-                    .map(|piece| format!("{}::", piece))
-                    .collect::<String>(),
+                    .fold(String::new(), |acc, piece| acc + piece + "::"),
                 future
             ),
             future.span(),
@@ -540,8 +539,7 @@ impl AstPieces {
                 namespace
                     .0
                     .iter()
-                    .map(|piece| format!("{}_", piece))
-                    .collect::<String>(),
+                    .fold(String::new(), |acc, piece| acc + piece + "_"),
                 future
             ),
             future.span(),
@@ -551,8 +549,7 @@ impl AstPieces {
             namespace
                 .0
                 .iter()
-                .map(|piece| format!("{}$", piece))
-                .collect::<String>(),
+                .fold(String::new(), |acc, piece| acc + piece + "$"),
             future
         );
 
