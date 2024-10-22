@@ -18,6 +18,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Install deps
+        run: sudo apt-get install libfmt-dev
+
       - name: Format
         run: cargo fmt --all -- --check
 
@@ -34,5 +37,9 @@ jobs:
           - windows-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Install deps
+        run: sudo apt-get install libfmt-dev
+
       - name: Build
         run: cargo build
