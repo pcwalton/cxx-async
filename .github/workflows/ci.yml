@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install deps
-        run: sudo apt-get install libfmt-dev
+        run: sudo apt-get install libfmt-dev libgflags-dev
 
       - name: Format
         run: cargo fmt --all -- --check
@@ -38,9 +38,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install deps
+      - name: Install dependencies on linux
         if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get install libfmt-dev
+        run: sudo apt-get install libfmt-dev libgflags-dev
 
       - name: Build
         run: cargo build
