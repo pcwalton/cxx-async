@@ -18,8 +18,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install deps
-        run: sudo apt-get install libfmt-dev libgflags-dev
+      # - name: Install deps
+      #   run: sudo apt-get install libfmt-dev libgflags-dev
 
       - name: Format
         run: cargo fmt --all -- --check
@@ -39,10 +39,82 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install dependencies on linux
-        if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get install libfmt-dev libgflags-dev
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git \
+            cmake \
+            make \
+            gcc \
+            g++ \
+            autoconf \
+            automake \
+            libtool \
+            python3-pip \
+            ninja-build \
+            libgflags-dev \
+            libboost-all-dev \
+            libdouble-conversion-dev \
+            libevent-dev \
+            libgflags-dev \
+            libgoogle-glog-dev \
+            libssl-dev \
+            libunwind-dev \
+            liblz4-dev \
+            liblzma-dev \
+            zlib1g-dev \
+            libsnappy-dev \
+            binutils-dev \
+            libjemalloc-dev \
+            libiberty-dev 
+      
+      - name: Build fmt
+        run: |
+          git clone https://github.com/fmtlib/fmt.git && cd fmt
+          rm _build -rf; mkdir _build -p && cd _build
+          cmake .. -DCMAKE_CXX_COMPILER=/usr/bin/clang++ -DCMAKE_C_COMPILER=/usr/bin/clang -DFMT_TEST=OFF
+          make -j$(nproc)
+          sudo make install
+          sudo ldconfig
+
+      - name: Build fast_float
+        run: |
+          git clone https://github.com/fastfloat/fast_float.git && cd fast_float
+          rm _build -rf; mkdir _build -p && cd _build
+          cmake .. -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
+          -DCMAKE_C_COMPILER=/usr/bin/clang \
+          -DCMAKE_CXX_FLAGS="-O3" \
+          -DBUILD_SHARED_LIBS=TRUE \
+          -DBUILD_BENCHMARKS=OFF
+          make -j$(nproc)
+          sudo make install
+          sudo ldconfig
+
+      - name: Build Folly
+        run: |
+          git clone https://github.com/facebook/folly.git
+          cd folly
+          rm _build -rf
+          mkdir _build && cd _build
+          cmake .. -DBUILD_SHARED_LIBS=ON \
+          -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
+          -DCMAKE_C_COMPILER=/usr/bin/clang \
+          -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+          -DBUILD_BENCHMARKS=OFF \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_CXX_STANDARD=20 \
+          -DCMAKE_CXX_STANDARD_REQUIRED=ON
+          make -j$(nproc)
+          sudo make install
+          sudo ldconfig
+
+      # - name: Install dependencies on linux
+      #   if: matrix.os == 'ubuntu-latest'
+      #   run: sudo apt-get install libfmt-dev libgflags-dev
 
       - name: Build
         working-directory: cxx-async
-        run: cargo build
+        run: | 
+          cargo build
+
