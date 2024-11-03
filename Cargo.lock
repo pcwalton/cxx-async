@@ -77,6 +77,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "cxx-async-example-cppcoro"
+version = "0.1.0"
+dependencies = [
+ "async-recursion 0.3.2",
+ "cxx",
+ "cxx-async",
+ "cxx-build",
+ "futures",
+ "once_cell",
+ "pkg-config",
+]
+
+[[package]]
 name = "cxx-async-example-folly"
 version = "0.1.0"
 dependencies = [
