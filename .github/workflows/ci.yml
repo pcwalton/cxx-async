@@ -67,13 +67,13 @@ jobs:
             libsnappy-dev \
             binutils-dev \
             libjemalloc-dev \
-            libiberty-dev \
+            libiberty-dev 
       
       - name: Build fmt
         run: |
           git clone https://github.com/fmtlib/fmt.git && cd fmt
           rm _build -rf; mkdir _build -p && cd _build
-          cmake .. -DCMAKE_CXX_COMPILER=/usr/bin/clang++ -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_FLAGS="-O3 -stdlib=libc++" \ -DBUILD_SHARED_LIBS=TRUE -DFMT_TEST=OFF
+          cmake .. -DCMAKE_CXX_COMPILER=/usr/bin/clang++ -DCMAKE_C_COMPILER=/usr/bin/clang -DFMT_TEST=OFF
           make -j$(nproc)
           sudo make install
           sudo ldconfig
@@ -82,7 +82,11 @@ jobs:
         run: |
           git clone https://github.com/fastfloat/fast_float.git && cd fast_float
           rm _build -rf; mkdir _build -p && cd _build
-          cmake .. -DCMAKE_CXX_COMPILER=/usr/bin/clang++ -DCMAKE_C_COMPILER=/usr/bin/clang -DCMAKE_CXX_FLAGS="-O3 -stdlib=libc++" -DBUILD_SHARED_LIBS=TRUE -DBUILD_BENCHMARKS=OFF
+          cmake .. -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
+          -DCMAKE_C_COMPILER=/usr/bin/clang \
+          -DCMAKE_CXX_FLAGS="-O3" \
+          -DBUILD_SHARED_LIBS=TRUE \
+          -DBUILD_BENCHMARKS=OFF
           make -j$(nproc)
           sudo make install
           sudo ldconfig
@@ -96,7 +100,6 @@ jobs:
           cmake .. -DBUILD_SHARED_LIBS=ON \
           -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
           -DCMAKE_C_COMPILER=/usr/bin/clang \
-          -DCMAKE_CXX_FLAGS="-O3 -stdlib=libc++" \
           -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
           -DBUILD_BENCHMARKS=OFF \
           -DCMAKE_BUILD_TYPE=Release \
@@ -114,5 +117,4 @@ jobs:
         working-directory: cxx-async
         run: | 
           cargo build
-          cargo run --example cxx-async-example-folly
 

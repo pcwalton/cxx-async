@@ -3,6 +3,6 @@ resolver = "2"
 members = [
     "cxx-async",
     "macro",
-    "examples/cppcoro",
+    # "examples/cppcoro",
     "examples/folly",
 ]
