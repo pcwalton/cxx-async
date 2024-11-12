@@ -63,7 +63,7 @@ dependencies = [
 
 [[package]]
 name = "cxx-async"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "async-recursion 1.1.1",
  "cxx",
@@ -104,7 +104,7 @@ dependencies = [
 
 [[package]]
 name = "cxx-async-macro"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "proc-macro2",
  "quote",

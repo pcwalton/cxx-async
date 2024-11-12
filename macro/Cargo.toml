@@ -1,6 +1,6 @@
 [package]
 name = "cxx-async-macro"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "The macro for simple interoperability between C++ coroutines and asynchronous Rust"
 license = "MIT OR Apache-2.0"
@@ -14,7 +14,4 @@ proc-macro = true
 [dependencies]
 proc-macro2 = "1"
 quote = "1"
-
-[dependencies.syn]
-version = "1"
-features = ["full"]
+syn = { version = "1", features = ["full"] }
