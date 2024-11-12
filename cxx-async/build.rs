@@ -41,7 +41,6 @@ fn main() {
         .cargo_warnings(false)
         .files(&vec!["src/cxx_async.cpp"])
         .flag_if_supported("-std=c++20")
-        .flag_if_supported("-fcoroutines")
         .include("include")
         .compile("cxx-async");
 }

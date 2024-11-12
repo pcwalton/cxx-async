@@ -1,5 +1,4 @@
 name: CI
-
 on:
   push:
     branches:
@@ -9,7 +8,7 @@ on:
       - main
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  group: '${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}'
   cancel-in-progress: true
 
 jobs:
@@ -18,31 +17,177 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install deps
-        run: sudo apt-get install libfmt-dev libgflags-dev
-
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: cargo-registry-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-registry-${{ runner.os }}-
+      
+      - name: Cache cargo build
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: cargo-build-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            cargo-build-${{ runner.os }}-
+      
       - name: Format
         run: cargo fmt --all -- --check
-
+      
       - name: Clippy
         working-directory: cxx-async
         run: cargo clippy -- -D warnings
 
-  build:
-    runs-on: ${{ matrix.os }}
+  build_and_test_with_folly:
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         os:
           - ubuntu-latest
-    #          - macos-latest
-    #          - windows-latest
+    
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install dependencies on linux
-        if: matrix.os == 'ubuntu-latest'
-        run: sudo apt-get install libfmt-dev libgflags-dev
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            git \
+            cmake \
+            make \
+            gcc \
+            g++ \
+            clang \
+            autoconf \
+            automake \
+            libtool \
+            python3-pip \
+            ninja-build \
+            libgflags-dev \
+            libdouble-conversion-dev \
+            libevent-dev \
+            libgoogle-glog-dev \
+            libboost-all-dev \
+            libssl-dev \
+            libunwind-dev \
+            liblz4-dev \
+            liblzma-dev \
+            zlib1g-dev \
+            libsnappy-dev \
+            binutils-dev \
+            libjemalloc-dev \
+            libiberty-dev 
+  
+      - name: Add environment variables
+        run: |
+          echo "PATH=$HOME/.local/bin:$PATH" >> $GITHUB_ENV
+          echo "CMAKE_PREFIX_PATH=$HOME/.local:$CMAKE_PREFIX_PATH" >> $GITHUB_ENV
+          echo "C_INCLUDE_PATH=$HOME/.local/include:$C_INCLUDE_PATH" >> $GITHUB_ENV
+          echo "CPLUS_INCLUDE_PATH=$HOME/.local/include:$CPLUS_INCLUDE_PATH" >> $GITHUB_ENV
+          echo "LIBRARY_PATH=$HOME/.local/lib:$LIBRARY_PATH" >> $GITHUB_ENV
+          echo "LD_LIBRARY_PATH=$HOME/.local/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+          echo "PKG_CONFIG_PATH=$HOME/.local/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
 
+      # Cache fmt
+      - name: Cache fmt
+        id: cache-fmt
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.local/include/fmt/**
+            ~/.local/lib/libfmt*
+          key: fmt-${{ runner.os }}-v10.1.1
+      
+      - name: Build fmt if not cached
+        if: steps.cache-fmt.outputs.cache-hit != 'true'
+        run: |
+          cd /tmp/
+          git clone https://github.com/fmtlib/fmt.git
+          cd fmt
+          mkdir -p _build && cd _build
+          cmake .. \
+            -DFMT_TEST=OFF \
+            -DCMAKE_INSTALL_PREFIX=$HOME/.local \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=TRUE
+          make -j$(nproc)
+          make install
+          sudo ldconfig
+          cd ../../
+          rm -rf /tmp/fmt
+      
+      # Cache fast_float
+      - name: Cache fast_float
+        id: cache-fast_float
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.local/lib/libfast_float*
+            ~/.local/include/fast_float/**
+          key: fast_float-${{ runner.os }}-v3.9.0
+      
+      - name: Build fast_float if not cached
+        if: steps.cache-fast_float.outputs.cache-hit != 'true'
+        run: |
+          cd /tmp
+          git clone https://github.com/fastfloat/fast_float.git && cd fast_float
+          rm -rf _build; mkdir -p _build && cd _build
+          cmake .. -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
+          -DCMAKE_C_COMPILER=/usr/bin/clang \
+          -DCMAKE_INSTALL_PREFIX=$HOME/.local \
+          -DCMAKE_CXX_FLAGS="-O3" \
+          -DBUILD_SHARED_LIBS=TRUE \
+          -DBUILD_BENCHMARKS=OFF
+          make -j$(nproc)
+          make install
+          sudo ldconfig
+          cd ../../
+          rm -rf /tmp/fast_float
+      
+      # Cache Folly
+      - name: Cache Folly
+        id: cache-folly
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.local/lib/libfolly**
+            ~/.local/include/folly/**
+          key: folly-${{ runner.os }}-20241104
+
+      - name: Build Folly if not cached
+        if: steps.cache-folly.outputs.cache-hit != 'true'
+        run: |
+          cd /tmp
+          git clone https://github.com/facebook/folly.git && cd folly
+          git checkout v2024.11.04.00
+          rm -rf _build; mkdir _build && cd _build
+          cmake .. \
+            -DBUILD_SHARED_LIBS=ON \
+            -DCMAKE_INSTALL_PREFIX=$HOME/.local \
+            -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
+            -DCMAKE_C_COMPILER=/usr/bin/clang \
+            -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DBUILD_TESTS=OFF \
+            -DBUILD_BENCHMARKS=OFF \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_STANDARD=20 \
+            -DCMAKE_CXX_STANDARD_REQUIRED=ON
+          make -j$(nproc)
+          make install
+          sudo ldconfig
+          cd ../
+          rm -rf /tmp/folly/
+
+      - name: Copy dependencies to sys
+        run: |
+          sudo cp -r $HOME/.local/include/* /usr/include/
+          sudo cp -r $HOME/.local/lib/* /usr/lib/
+          sudo ldconfig
+      
       - name: Build
         working-directory: cxx-async
-        run: cargo build
+        run: |
+          cargo build

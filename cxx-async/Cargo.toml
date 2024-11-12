@@ -23,7 +23,7 @@ pin-utils = "0.1"
 # CXX related dependencies
 cxx = { version = "1", features = ["c++20"] }
 cxx-async-macro = { version = "0.1.1", path = "../macro" }
-link-cplusplus = { version = "1", features = ["libc++"] }
+link-cplusplus = { version = "1" }
 
 # Async related dependencies
 futures = { version = "0.3", features = ["thread-pool"] }
