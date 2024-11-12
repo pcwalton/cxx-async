@@ -34,7 +34,6 @@ features = ["thread-pool"]
 
 [dependencies.link-cplusplus]
 version = "1"
-features = ["libc++"]
 
 [build-dependencies]
 cxx-build = "1"
