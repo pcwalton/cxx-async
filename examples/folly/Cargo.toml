@@ -8,16 +8,12 @@ edition = "2018"
 async-recursion = "0.3"
 once_cell = "1"
 
-[dependencies.cxx]
-version = "1"
-features = ["c++20"]
+# CXX related dependencies
+cxx = { version = "1", features = ["c++20"] }
+cxx-async = { path = "../../cxx-async" }
 
-[dependencies.cxx-async]
-path = "../../cxx-async"
-
-[dependencies.futures]
-version = "0.3"
-features = ["thread-pool"]
+# Async related dependencies
+futures = { version = "0.3", features = ["thread-pool"] }
 
 [build-dependencies]
 cxx-build = "1"
