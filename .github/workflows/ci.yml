@@ -191,3 +191,51 @@ jobs:
         working-directory: cxx-async
         run: |
           cargo build
+          
+  build_and_test_cppcoro_example:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      # Cache cppcoro
+      - name: Cache cppcoro
+        id: cache-cppcoro
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.local/include/cppcoro/**
+            ~/.local/lib/libcppcoro*
+          key: cppcoro-${{ runner.os }}-dev
+      
+      - name: Build cppcoro
+        if: steps.cache-cppcoro.outputs.cache-hit != 'true'
+        run: |
+          cd /tmp
+          git clone https://github.com/andreasbuhr/cppcoro.git && cd cppcoro
+          rm -rf _build; mkdir -p _build && cd _build
+          cmake .. -DCMAKE_CXX_COMPILER=/usr/bin/clang++ \
+          -DCMAKE_C_COMPILER=/usr/bin/clang \
+          -DCMAKE_INSTALL_PREFIX=$HOME/.local \
+          -DCMAKE_CXX_FLAGS="-O3" \
+          -DBUILD_SHARED_LIBS=TRUE
+          make -j$(nproc)
+          make install
+          sudo ldconfig
+          cd ../../
+          rm -rf /tmp/cppcoro
+          
+      - name: Copy dependencies to sys
+        run: |
+          sudo cp -r $HOME/.local/include/* /usr/include/
+          sudo cp -r $HOME/.local/lib/* /usr/lib/
+          sudo ldconfig
+      
+      - name: Build
+        working-directory: cxx-async
+        run: |
+          cargo build
