@@ -852,8 +852,7 @@ where
         Err(error) => {
             drop(writeln!(
                 io::stderr(),
-                "Rust async code panicked when awaited from C++: {:?}",
-                error
+                "Rust async code panicked when awaited from C++: {error:?}"
             ));
             process::abort();
         }

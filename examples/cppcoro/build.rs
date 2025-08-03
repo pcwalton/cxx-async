@@ -11,7 +11,8 @@ fn main() {
 
     cxx_build::bridge("src/main.rs")
         .file("src/cppcoro_example.cpp")
-        .flag("-std=c++20")
+        .flag_if_supported("-std=c++20")
+        .flag_if_supported("-Wno-ignored-qualifiers")
         .flag_if_supported("-Wall")
         .include("include")
         .include("../common/include")

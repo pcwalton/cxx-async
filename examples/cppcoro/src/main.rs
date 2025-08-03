@@ -7,8 +7,7 @@ use async_recursion::async_recursion;
 use cxx_async::CxxAsyncException;
 use futures::executor::{self, ThreadPool};
 use futures::task::SpawnExt;
-use futures::{join, Stream};
-use futures::{StreamExt, TryStreamExt};
+use futures::{join, Stream, StreamExt};
 use once_cell::sync::Lazy;
 use std::future::Future;
 use std::ops::Range;
@@ -271,6 +270,8 @@ fn test_indirect_fizzbuzz() {
 
 #[test]
 fn test_streams_throwing_exceptions() {
+    use futures::TryStreamExt;
+
     let mut vector = executor::block_on(
         ffi::cppcoro_not_fizzbuzz()
             .map_err(|err| err.what().to_owned())
@@ -347,12 +348,12 @@ fn main() {
     // Test Rust calling C++ streams that throw exceptions partway through.
     let vector = executor::block_on(
         ffi::cppcoro_not_fizzbuzz()
-            .map(|result| format!("{:?}", result))
+            .map(|result| format!("{result:?}"))
             .collect::<Vec<String>>(),
     );
     println!("{}", vector.join(", "));
 
     // Test that destructors are called when dropping a future.
-    let _ = ffi::cppcoro_drop_coroutine_wait();
+    ffi::cppcoro_drop_coroutine_wait();
     drop(executor::block_on(ffi::cppcoro_drop_coroutine_signal()));
 }
