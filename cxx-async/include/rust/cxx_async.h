@@ -886,7 +886,7 @@ inline bool RustStreamAwaiter<Future>::await_suspend(
     std_coroutine::coroutine_handle<void> next) {
   SuspendedCoroutine* coroutine = new SuspendedCoroutine(
       std::make_unique<CoroutineHandleContinuation>(std::move(next)),
-      [=](SuspendedCoroutine* coroutine) {
+      [this](SuspendedCoroutine* coroutine) {
         return this->poll_next(coroutine);
       });
   return coroutine->initial_suspend();

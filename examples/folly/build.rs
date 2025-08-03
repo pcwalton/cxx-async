@@ -16,6 +16,7 @@ fn main() {
         .include("../../cxx-async/include")
         .includes(&folly.include_paths);
     build.flag("-std=c++20");
+    build.flag("-Wno-ignored-qualifiers");
 
     for other_cflag in &folly.other_cflags {
         build.flag(other_cflag);
