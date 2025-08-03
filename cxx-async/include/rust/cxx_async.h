@@ -152,12 +152,6 @@
               std::move(other)) {}                                          \
   };                                                                        \
   CXXASYNC_CLOSE_NAMESPACE(__VA_ARGS__)                                     \
-  template <typename... Args>                                               \
-  struct ::rust::async::std_coroutine::                                     \
-      coroutine_traits<CXXASYNC_JOIN_NAMESPACE(__VA_ARGS__), Args...> {     \
-    using promise_type =                                                    \
-        ::rust::async::RustPromise<CXXASYNC_JOIN_NAMESPACE(__VA_ARGS__)>;   \
-  };
 
 #define CXXASYNC_DEFINE_FUTURE(type, ...) \
   CXXASYNC_DEFINE_FUTURE_OR_STREAM(type, type, __VA_ARGS__)
