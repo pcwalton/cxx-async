@@ -1,6 +1,6 @@
 [package]
 name = "cxx-async"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["Patrick Walton <pcwalton@mimiga.net>"]
 edition = "2021"
 links = "cxx-async"
