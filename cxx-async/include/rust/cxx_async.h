@@ -551,6 +551,9 @@ class RustFutureReceiver {
         // TODO(pcwalton): Handle C++ consuming Rust streams.
         CXXASYNC_ASSERT(false);
         std::terminate();
+      default:
+        CXXASYNC_ASSERT(false);
+        std::terminate();
     }
   }
 };
