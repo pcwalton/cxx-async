@@ -21,7 +21,7 @@ once_cell = "1"
 
 # CXX related dependencies
 cxx = { version = "1", features = ["c++20"] }
-cxx-async-macro = { version = "0.1.1", path = "../macro" }
+cxx-async-macro = { version = "0.1.3", path = "../macro" }
 link-cplusplus = { version = "1" }
 
 # Async related dependencies
