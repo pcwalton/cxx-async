@@ -1,0 +1,54 @@
+name: Publish
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'pcwalton/cxx-async' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+
+      - name: Verify release versions
+        run: |
+          python3 - <<'PY'
+          import os
+          import tomllib
+          from pathlib import Path
+
+          version = os.environ['GITHUB_REF_NAME'].removeprefix('v')
+          for manifest in ['macro/Cargo.toml', 'cxx-async/Cargo.toml']:
+              package = tomllib.loads(Path(manifest).read_text())['package']
+              if package['version'] != version:
+                  raise SystemExit(f"{manifest}: expected version {version}, found {package['version']}")
+          PY
+
+      - name: Update Rust
+        run: rustup update stable --no-self-update
+
+      - name: Verify packages
+        run: cargo +stable publish --dry-run --locked -p cxx-async-macro -p cxx-async
+
+      - uses: rust-lang/crates-io-auth-action@c6f97d42243bad5fab37ca0427f495c86d5b1a18 # v1
+        id: auth
+
+      - name: Publish crates
+        run: cargo +stable publish --locked -p cxx-async-macro -p cxx-async
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
