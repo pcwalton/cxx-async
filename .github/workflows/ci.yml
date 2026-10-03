@@ -100,13 +100,14 @@ jobs:
           path: |
             ~/.local/include/fmt/**
             ~/.local/lib/libfmt*
-          key: fmt-${{ runner.os }}-v10.1.1
+            ~/.local/lib/cmake/fmt/**
+          key: fmt-${{ runner.os }}-v10.1.1-pinned
       
       - name: Build fmt if not cached
         if: steps.cache-fmt.outputs.cache-hit != 'true'
         run: |
           cd /tmp/
-          git clone https://github.com/fmtlib/fmt.git
+          git clone --branch 10.1.1 --depth 1 https://github.com/fmtlib/fmt.git
           cd fmt
           mkdir -p _build && cd _build
           cmake .. \
